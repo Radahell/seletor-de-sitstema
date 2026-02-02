@@ -1,0 +1,90 @@
+version: "3.8"
+
+services:
+  # ==========================================
+  # MYSQL - Banco Master + Tenants
+  # ==========================================
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: varzeaprime_config
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+      - ./schema-super-multitenant.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - seletor-net
+
+  # ==========================================
+  # BACKEND - Flask (Gunicorn)
+  # ==========================================
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: seletor-sistema-api
+    env_file:
+      - .env
+    environment:
+      MASTER_DB_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/varzeaprime_config
+      SECRET_KEY: ${SECRET_KEY}
+      PYTHONPATH: /app
+    volumes:
+      - ./backend/uploads:/uploads
+      - ./backend:/app
+      - ./frontend/dist:/app/frontend/dist
+    command: >
+      gunicorn -w 2 -k gthread --threads 8 --timeout 60 --keep-alive 5
+      -b 0.0.0.0:22012 "app.main:app"
+    expose:
+      - "22012"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - seletor-net
+      - nginx-proxy
+
+  # ==========================================
+  # FRONTEND - React Dev (opcional)
+  # ==========================================
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: seletor-sistema-web
+    env_file:
+      - ./frontend/.env
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "22011", "--strictPort"]
+    volumes:
+      - ./frontend:/app
+      - web_node_modules:/app/node_modules
+    expose:
+      - "22011"
+    depends_on:
+      - api
+    restart: unless-stopped
+    profiles:
+      - dev
+    networks:
+      - seletor-net
+      - nginx-proxy
+
+volumes:
+  db_data:
+  web_node_modules:
+
+networks:
+  seletor-net:
+    driver: bridge
+  nginx-proxy:
+    external: true
+    name: nginx-proxy
