@@ -1,0 +1,8 @@
+# Production overrides – use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  web:
+    # In production the multi-stage Dockerfile builds and serves via nginx.
+    # No volume mounts, no dev server.
+    command: []
+    volumes: []

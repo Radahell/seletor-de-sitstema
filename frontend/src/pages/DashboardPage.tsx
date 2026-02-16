@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Trophy, Video, Building2, Flag, ChevronRight, Plus, LogOut, User,
-  Search, Loader2, RefreshCw
+  Search, Loader2, RefreshCw, Shield
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import api, { SystemWithTenants, TenantInfo, ApiError } from '../services/api';
@@ -17,7 +17,7 @@ const SYSTEM_ICONS: Record<string, typeof Trophy> = {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { user, tenants, logout, refreshUser } = useAuth();
+  const { user, tenants, logout, refreshUser, isSuperAdmin } = useAuth();
 
   const [myTenants, setMyTenants] = useState<SystemWithTenants[]>([]);
   const [availableTenants, setAvailableTenants] = useState<SystemWithTenants[]>([]);
@@ -57,7 +57,7 @@ export default function DashboardPage() {
   };
 
   const handleEnterTenant = (tenant: TenantInfo) => {
-    // Store tenant info and redirect to the system
+    // Store tenant info in localStorage (shared across same origin)
     localStorage.setItem('current_tenant', JSON.stringify(tenant));
     localStorage.setItem('tenant_slug', tenant.slug);
     localStorage.setItem('system_slug', tenant.system?.slug || '');
@@ -69,6 +69,9 @@ export default function DashboardPage() {
       }));
     }
 
+    // Get hub token to pass to external systems
+    const hubToken = localStorage.getItem('auth_token') || '';
+
     // Redirect to system URL
     const baseUrl = tenant.system?.slug === 'lances'
       ? '/lances'
@@ -78,8 +81,10 @@ export default function DashboardPage() {
       // Internal route - use React Router
       navigate(baseUrl);
     } else {
-      // External system - full page redirect
-      window.location.href = baseUrl;
+      // External system - full page redirect with hub token
+      // The target system reads the token from URL and stores locally
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      window.location.href = `${baseUrl}${separator}hub_token=${encodeURIComponent(hubToken)}&tenant=${encodeURIComponent(tenant.slug)}&role=${encodeURIComponent(tenant.role || 'player')}`;
     }
   };
 
@@ -112,6 +117,16 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {isSuperAdmin && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 transition-colors text-sm font-semibold"
+              >
+                <Shield className="w-4 h-4" />
+                <span className="hidden sm:inline">Admin</span>
+              </button>
+            )}
+
             <button
               onClick={loadData}
               className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"

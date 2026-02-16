@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     display_name VARCHAR(100) NOT NULL COMMENT 'Nome para exibição',
 
     database_name VARCHAR(64) NOT NULL COMMENT 'Nome real do DB (onde app roda)',
-    database_host VARCHAR(255) DEFAULT 'db' COMMENT 'Host do MySQL do app (ex: varzea-prime-db-1)',
+    database_host VARCHAR(255) DEFAULT 'db' COMMENT 'Host do MySQL do app (ex: varzea-prime-db)',
 
     logo_url VARCHAR(255) COMMENT 'URL do logo',
     favicon_url VARCHAR(255) COMMENT 'Favicon customizado',
@@ -142,7 +142,7 @@ is_active    = VALUES(is_active);
 -- SEED: tenants (idempotente, sem depender de IDs)
 -- IMPORTANTE:
 -- database_host aqui deve apontar para o MySQL do VARZEA onde os tenants existem.
--- Se seu padrão é varzea-prime-db-1, já deixei setado.
+-- Se seu padrão é varzea-prime-db, já deixei setado.
 -- ==========================================
 INSERT INTO tenants (
   system_id, slug, display_name, database_name, database_host,
@@ -152,31 +152,31 @@ INSERT INTO tenants (
 VALUES
 (
   (SELECT id FROM systems WHERE slug='jogador' LIMIT 1),
-  'copa-brahma', 'Copa Brahma', 'copa_brahma_db', 'varzea-prime-db-1',
+  'copa-brahma', 'Copa Brahma', 'copa_brahma_db', 'varzea-prime-db',
   '#FFD700', '#000000', '#FFFFFF', 'Bem-vindo à Copa Brahma - O melhor futebol amador!',
   TRUE, TRUE, FALSE
 ),
 (
   (SELECT id FROM systems WHERE slug='jogador' LIMIT 1),
-  'copa-aposentados', 'Copa AposentadoS', 'copa_aposentados', 'varzea-prime-db-1',
+  'copa-aposentados', 'Copa AposentadoS', 'copa_aposentados', 'varzea-prime-db',
   '#ef4444', '#f59e0b', '#3b82f6', 'Bem-vindo à Copa AposentadoS - Experiência em campo!',
   TRUE, TRUE, FALSE
 ),
 (
   (SELECT id FROM systems WHERE slug='jogador' LIMIT 1),
-  'liga-ouro', 'Liga Ouro', 'liga_ouro_db', 'varzea-prime-db-1',
+  'liga-ouro', 'Liga Ouro', 'liga_ouro_db', 'varzea-prime-db',
   '#F4C430', '#C0C0C0', '#CD7F32', 'Bem-vindo à Liga Ouro - Onde campeões são forjados!',
   TRUE, TRUE, FALSE
 ),
 (
   (SELECT id FROM systems WHERE slug='quadra' LIMIT 1),
-  'arena-sport', 'Arena Sport Center', 'arena_sport_db', 'varzea-prime-db-1',
+  'arena-sport', 'Arena Sport Center', 'arena_sport_db', 'varzea-prime-db',
   '#10b981', '#059669', '#3b82f6', 'Bem-vindo à Arena Sport - Reserve sua quadra!',
   TRUE, TRUE, FALSE
 ),
 (
   (SELECT id FROM systems WHERE slug='quadra' LIMIT 1),
-  'society-club', 'Society Club', 'society_club_db', 'varzea-prime-db-1',
+  'society-club', 'Society Club', 'society_club_db', 'varzea-prime-db',
   '#8b5cf6', '#7c3aed', '#3b82f6', 'Society Club - A melhor infraestrutura para seu jogo',
   TRUE, TRUE, FALSE
 )

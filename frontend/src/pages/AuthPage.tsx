@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, UserPlus, Mail, Lock, User, Phone, ArrowRight, AlertCircle } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, User, Phone, ArrowRight, AlertCircle, MapPin, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiError } from '../services/api';
+import api, { ApiError, type SystemInfo } from '../services/api';
+import { ESTADOS, fetchCidadesByUF, getTimezoneByUF, type Cidade } from '../lib/ibge';
+import { fetchAddressByCep } from '../lib/viacep';
 
 type AuthMode = 'login' | 'register';
 
@@ -20,6 +22,66 @@ export default function AuthPage() {
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
   const [phone, setPhone] = useState('');
+  const [state, setState] = useState('');
+  const [city, setCity] = useState('');
+  const [cidades, setCidades] = useState<Cidade[]>([]);
+  const [loadingCidades, setLoadingCidades] = useState(false);
+
+  // Address fields
+  const [cep, setCep] = useState('');
+  const [logradouro, setLogradouro] = useState('');
+  const [numero, setNumero] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [complemento, setComplemento] = useState('');
+  const [loadingCep, setLoadingCep] = useState(false);
+
+  // Interests
+  const [systems, setSystems] = useState<SystemInfo[]>([]);
+  const [selectedInterests, setSelectedInterests] = useState<number[]>([]);
+
+  // Carrega sistemas disponíveis
+  useEffect(() => {
+    api.getSystems().then(setSystems).catch(() => {});
+  }, []);
+
+  // Busca cidades quando o estado muda
+  useEffect(() => {
+    if (!state) {
+      setCidades([]);
+      setCity('');
+      return;
+    }
+    setLoadingCidades(true);
+    setCity('');
+    fetchCidadesByUF(state)
+      .then(setCidades)
+      .finally(() => setLoadingCidades(false));
+  }, [state]);
+
+  // Auto-fill endereço via CEP
+  const handleCepChange = async (value: string) => {
+    setCep(value);
+    const clean = value.replace(/\D/g, '');
+    if (clean.length === 8) {
+      setLoadingCep(true);
+      const addr = await fetchAddressByCep(clean);
+      if (addr) {
+        setLogradouro(addr.logradouro);
+        setBairro(addr.bairro);
+        setCity(addr.localidade);
+        setState(addr.uf);
+      }
+      setLoadingCep(false);
+    }
+  };
+
+  const toggleInterest = (systemId: number) => {
+    setSelectedInterests((prev) =>
+      prev.includes(systemId)
+        ? prev.filter((id) => id !== systemId)
+        : [...prev, systemId]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +92,22 @@ export default function AuthPage() {
       if (mode === 'login') {
         await login(email, password);
       } else {
-        await register({ name, email, password, nickname: nickname || undefined, phone: phone || undefined });
+        const timezone = state ? getTimezoneByUF(state) : undefined;
+        await register({
+          name, email, password,
+          nickname: nickname || undefined,
+          phone: phone || undefined,
+          cep: cep || undefined,
+          logradouro: logradouro || undefined,
+          numero: numero || undefined,
+          bairro: bairro || undefined,
+          complemento: complemento || undefined,
+          city: city || undefined,
+          state: state || undefined,
+          timezone,
+          interests: selectedInterests.length > 0 ? selectedInterests : undefined,
+        });
       }
-      // Se o usuário tentou entrar em um tenant antes de logar, redireciona
       const joinIntent = localStorage.getItem('join_intent');
       if (joinIntent) {
         localStorage.removeItem('join_intent');
@@ -160,6 +235,108 @@ export default function AuthPage() {
                     />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Endereço (opcional)
+                  </label>
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={cep}
+                        onChange={(e) => handleCepChange(e.target.value)}
+                        placeholder="CEP (auto-preenche)"
+                        maxLength={9}
+                        className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none transition-colors"
+                      />
+                      {loadingCep && (
+                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 animate-spin" />
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={logradouro}
+                      onChange={(e) => setLogradouro(e.target.value)}
+                      placeholder="Logradouro"
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none transition-colors"
+                    />
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        value={numero}
+                        onChange={(e) => setNumero(e.target.value)}
+                        placeholder="Nº"
+                        className="w-24 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none transition-colors"
+                      />
+                      <input
+                        type="text"
+                        value={bairro}
+                        onChange={(e) => setBairro(e.target.value)}
+                        placeholder="Bairro"
+                        className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={complemento}
+                      onChange={(e) => setComplemento(e.target.value)}
+                      placeholder="Complemento"
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none transition-colors"
+                    />
+                    <div className="flex gap-3">
+                      <select
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                        className="w-24 px-3 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:border-red-500 focus:outline-none transition-colors appearance-none cursor-pointer"
+                      >
+                        <option value="">UF</option>
+                        {ESTADOS.map((e) => (
+                          <option key={e.sigla} value={e.sigla}>{e.sigla}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        disabled={!state || loadingCidades}
+                        className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:border-red-500 focus:outline-none transition-colors disabled:opacity-40 appearance-none cursor-pointer"
+                      >
+                        <option value="">
+                          {loadingCidades ? 'Carregando...' : state ? 'Selecione a cidade' : 'Selecione o UF primeiro'}
+                        </option>
+                        {cidades.map((c) => (
+                          <option key={c.id} value={c.nome}>{c.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {systems.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
+                      Quais serviços te interessam?
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {systems.map((sys) => (
+                        <button
+                          key={sys.id}
+                          type="button"
+                          onClick={() => toggleInterest(sys.id)}
+                          className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all border ${
+                            selectedInterests.includes(sys.id)
+                              ? 'border-red-500 bg-red-500/10 text-white'
+                              : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600'
+                          }`}
+                        >
+                          {sys.displayName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

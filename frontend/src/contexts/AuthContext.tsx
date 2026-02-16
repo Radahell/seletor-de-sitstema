@@ -5,6 +5,7 @@ interface AuthContextType {
   user: User | null;
   tenants: TenantInfo[];
   currentTenantId: number | null;
+  isSuperAdmin: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -21,6 +22,17 @@ interface RegisterData {
   password: string;
   nickname?: string;
   phone?: string;
+  cpf?: string;
+  cnpj?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
+  city?: string;
+  state?: string;
+  timezone?: string;
+  interests?: number[];
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -41,6 +53,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [currentTenantId, setCurrentTenantId] = useState<number | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!user;
@@ -61,6 +74,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(response.user);
       setTenants(response.tenants);
       setCurrentTenantId(response.currentTenantId || null);
+      setIsSuperAdmin(response.isSuperAdmin || false);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         // Token expired or invalid
@@ -68,6 +82,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(null);
         setTenants([]);
         setCurrentTenantId(null);
+        setIsSuperAdmin(false);
       }
       throw error;
     }
@@ -79,6 +94,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(response.user);
     setTenants(response.tenants || []);
     setCurrentTenantId(null);
+    setIsSuperAdmin(response.isSuperAdmin || false);
   }, []);
 
   const register = useCallback(async (data: RegisterData) => {
@@ -99,6 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null);
       setTenants([]);
       setCurrentTenantId(null);
+      setIsSuperAdmin(false);
     }
   }, []);
 
@@ -121,6 +138,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     tenants,
     currentTenantId,
+    isSuperAdmin,
     isLoading,
     isAuthenticated,
     login,

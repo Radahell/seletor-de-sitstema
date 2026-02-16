@@ -1,5 +1,6 @@
 -- =================================================================
 -- TEMPLATE: SISTEMA DE JOGADOR (CAMPEONATO)
+-- Versao: 2.0 (pos-merge User+Player)
 -- =================================================================
 
 -- 1. TABELAS INDEPENDENTES (Sem Foreign Keys iniciais)
@@ -21,14 +22,6 @@ CREATE TABLE IF NOT EXISTS blocked_identities (
     INDEX idx_blocked_email (email)
 );
 
-CREATE TABLE IF NOT EXISTS players (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    photo VARCHAR(512),
-    preferred_position VARCHAR(100),
-    skill_rating FLOAT DEFAULT 0.0
-);
-
 CREATE TABLE IF NOT EXISTS seasons (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -38,7 +31,7 @@ CREATE TABLE IF NOT EXISTS seasons (
 );
 
 -- =================================================================
--- 2. USUÁRIOS E PERMISSÕES (Depende de Players)
+-- 2. USUARIOS (User + Player unificados)
 -- =================================================================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -49,14 +42,18 @@ CREATE TABLE IF NOT EXISTS users (
     is_approved TINYINT(1) DEFAULT 0,
     is_blocked TINYINT(1) DEFAULT 0,
     is_monthly TINYINT(1) DEFAULT 0,
-    player_id INT,
     name VARCHAR(255),
     nickname VARCHAR(255),
     phone VARCHAR(50),
-    avatar_url LONGTEXT,
-    
-    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL,
-    INDEX idx_email (email)
+    cpf VARCHAR(14),
+    photo VARCHAR(512),
+    preferred_position VARCHAR(100),
+    skill_rating FLOAT DEFAULT 0.0,
+    fk_id_user_hub INT NULL UNIQUE,
+
+    INDEX idx_email (email),
+    INDEX idx_cpf (cpf),
+    INDEX idx_fk_user_hub (fk_id_user_hub)
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -81,7 +78,7 @@ CREATE TABLE IF NOT EXISTS finance_entries (
     description VARCHAR(255),
     entry_date DATE NOT NULL,
     created_by INT,
-    
+
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
@@ -108,7 +105,7 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
     is_stackable TINYINT(1) DEFAULT 1,
     is_active TINYINT(1) DEFAULT 1,
     apply_conditions JSON,
-    
+
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
     INDEX idx_rule_identifier (identifier)
 );
@@ -126,7 +123,7 @@ CREATE TABLE IF NOT EXISTS game_days (
     signup_goalkeepers_limit INT DEFAULT 4,
     signup_players_limit INT DEFAULT 16,
     signup_reserves_limit INT DEFAULT 4,
-    
+
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE
 );
 
@@ -137,13 +134,14 @@ CREATE TABLE IF NOT EXISTS matches (
     match_day DATE NOT NULL,
     match_time TIME NOT NULL,
     status ENUM('scheduled', 'finished') DEFAULT 'scheduled',
-    
+
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
     FOREIGN KEY (day_id) REFERENCES game_days(id) ON DELETE CASCADE
 );
 
 -- =================================================================
--- 4. VÍNCULOS DE JOGO (Times, Escalações, Presença)
+-- 4. VINCULOS DE JOGO (Times, Escalacoes, Presenca)
+-- FKs apontam para users(id) diretamente
 -- =================================================================
 
 CREATE TABLE IF NOT EXISTS game_day_teams (
@@ -154,10 +152,10 @@ CREATE TABLE IF NOT EXISTS game_day_teams (
     status VARCHAR(20) DEFAULT 'present',
     is_substitute TINYINT(1) DEFAULT 0,
     replaced_player_id INT,
-    
+
     FOREIGN KEY (day_id) REFERENCES game_days(id) ON DELETE CASCADE,
-    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
-    FOREIGN KEY (replaced_player_id) REFERENCES players(id) ON DELETE SET NULL
+    FOREIGN KEY (player_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (replaced_player_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS match_teams (
@@ -166,9 +164,9 @@ CREATE TABLE IF NOT EXISTS match_teams (
     player_id INT NOT NULL,
     team VARCHAR(10) NOT NULL,
     is_goalkeeper TINYINT(1) DEFAULT 0,
-    
+
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
-    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+    FOREIGN KEY (player_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS match_events (
@@ -181,16 +179,16 @@ CREATE TABLE IF NOT EXISTS match_events (
     timestamp DATETIME NOT NULL,
     created_by INT NOT NULL,
     context JSON,
-    
+
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
     FOREIGN KEY (day_id) REFERENCES game_days(id) ON DELETE CASCADE,
-    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (rule_id) REFERENCES scoring_rules(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- =================================================================
--- 5. FINANCEIRO E INSCRIÇÕES (Signups)
+-- 5. FINANCEIRO E INSCRICOES (Signups)
 -- =================================================================
 
 CREATE TABLE IF NOT EXISTS game_day_payments (
@@ -202,7 +200,7 @@ CREATE TABLE IF NOT EXISTS game_day_payments (
     payment_type ENUM('monthly', 'single') DEFAULT 'single',
     paid_at DATETIME,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (day_id) REFERENCES game_days(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -214,7 +212,7 @@ CREATE TABLE IF NOT EXISTS game_day_signups (
     name VARCHAR(255) NOT NULL,
     slot_type ENUM('goalkeeper', 'player', 'reserve') NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (day_id) REFERENCES game_days(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE KEY game_day_signups_day_user_unique (day_id, user_id)
@@ -227,14 +225,14 @@ CREATE TABLE IF NOT EXISTS match_signups (
     name VARCHAR(255) NOT NULL,
     slot_type ENUM('goalkeeper', 'player', 'reserve') NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE KEY match_signups_match_user_unique (match_id, user_id)
 );
 
 -- =================================================================
--- 6. DIVERSOS E ESTATÍSTICAS
+-- 6. DIVERSOS E ESTATISTICAS
 -- =================================================================
 
 CREATE TABLE IF NOT EXISTS game_day_exceptions (
@@ -247,10 +245,10 @@ CREATE TABLE IF NOT EXISTS game_day_exceptions (
     suggestions JSON,
     created_by INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (day_id) REFERENCES game_days(id) ON DELETE CASCADE,
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
-    FOREIGN KEY (removed_player_id) REFERENCES players(id) ON DELETE SET NULL,
+    FOREIGN KEY (removed_player_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -261,8 +259,8 @@ CREATE TABLE IF NOT EXISTS player_season_stats (
     total_points INT DEFAULT 0,
     matches_played INT DEFAULT 0,
     last_updated DATETIME NOT NULL,
-    
-    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+
+    FOREIGN KEY (player_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
     CHECK (total_points >= 0)
 );

@@ -46,7 +46,14 @@ export default function SwitchSystemMenu({
       ? '/lances'
       : `/${tenant.system?.slug}/${tenant.slug}`;
 
-    window.location.href = baseUrl;
+    if (tenant.system?.slug === 'lances') {
+      window.location.href = baseUrl;
+    } else {
+      // Pass hub_token for SSO with external systems
+      const hubToken = localStorage.getItem('auth_token') || '';
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      window.location.href = `${baseUrl}${separator}hub_token=${encodeURIComponent(hubToken)}&tenant=${encodeURIComponent(tenant.slug)}`;
+    }
   };
 
   const handleLogout = async () => {

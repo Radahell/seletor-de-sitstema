@@ -358,7 +358,7 @@ def create_tenant():
                     )
                 )
 
-            # 4) cria admin (compat Varzea: cria Player + User com player_id)
+            # 4) cria admin no DB do tenant
             admin_email = data.get("adminEmail", f"admin@{slug}.com")
             admin_pass = data.get("adminPassword", "123")
             admin_name = data.get("adminName", "Super Admin")
@@ -367,31 +367,26 @@ def create_tenant():
             pass_hash = hash_password(admin_pass)
 
             if system_slug == "jogador":
-                # 4.1) cria player (igual /auth/register do Varzea: Player.name = nickname)
-                res = conn.exec_driver_sql(
-                    "INSERT INTO players (name) VALUES (%s)",
-                    (admin_nickname,),
-                )
-                player_id = res.lastrowid
-
-                # 4.2) cria user apontando pro player
+                # User direto (sem Player separado - pos-merge v2)
                 conn.exec_driver_sql(
                     """
                     INSERT INTO users (
                         email, password_hash,
                         is_admin, is_approved, is_blocked, is_monthly,
-                        player_id, name, nickname, phone, avatar_url
+                        name, nickname, phone, photo,
+                        skill_rating
                     )
                     VALUES (
                         %s, %s,
                         1, 1, 0, 0,
-                        %s, %s, %s, NULL, NULL
+                        %s, %s, NULL, NULL,
+                        0.0
                     )
                     """,
-                    (admin_email, pass_hash, player_id, admin_name, admin_nickname),
+                    (admin_email, pass_hash, admin_name, admin_nickname),
                 )
             else:
-                # genérico (se existir outro sistema que não tenha players/users nesse formato)
+                # generico (outros sistemas: quadra, arbitro, etc)
                 conn.exec_driver_sql(
                     """
                     INSERT INTO users (name, email, password_hash, role)
@@ -399,6 +394,60 @@ def create_tenant():
                     """,
                     (admin_name, admin_email, pass_hash),
                 )
+        # 5) Cria/encontra user no HUB e vincula membership com role='admin'
+        hub_user = fetch_one(
+            "SELECT id FROM users WHERE email = :email",
+            {"email": admin_email},
+        )
+
+        if hub_user:
+            hub_user_id = hub_user["id"]
+        else:
+            execute_sql(
+                """
+                INSERT INTO users (name, nickname, email, password_hash, is_active)
+                VALUES (:name, :nickname, :email, :pass_hash, TRUE)
+                """,
+                {
+                    "name": admin_name,
+                    "nickname": admin_nickname,
+                    "email": admin_email,
+                    "pass_hash": pass_hash,
+                },
+            )
+            hub_user = fetch_one(
+                "SELECT id FROM users WHERE email = :email",
+                {"email": admin_email},
+            )
+            hub_user_id = hub_user["id"]
+
+        # Busca o tenant_id recém-criado no master
+        tenant_row = fetch_one(
+            "SELECT id FROM tenants WHERE slug = :slug",
+            {"slug": slug},
+        )
+        tenant_id = tenant_row["id"]
+
+        # Cria membership: admin deste tenant
+        execute_sql(
+            """
+            INSERT INTO user_tenants (user_id, tenant_id, role, is_active)
+            VALUES (:user_id, :tenant_id, 'admin', TRUE)
+            ON DUPLICATE KEY UPDATE role = 'admin', is_active = TRUE
+            """,
+            {"user_id": hub_user_id, "tenant_id": tenant_id},
+        )
+
+        # 6) Atualiza fk_id_user_hub no user local do tenant
+        try:
+            with tenant_engine.begin() as conn2:
+                conn2.exec_driver_sql(
+                    "UPDATE users SET fk_id_user_hub = %s WHERE email = %s",
+                    (hub_user_id, admin_email),
+                )
+        except Exception as hub_link_err:
+            print(f"⚠️  fk_id_user_hub não atualizado (coluna pode não existir): {hub_link_err}", flush=True)
+
         return (
             jsonify(
                 {
@@ -509,6 +558,10 @@ def delete_tenant(tenant_id: int):
 # ------------------------------------------------------------
 from app.routes.auth_routes import auth_bp
 from app.routes.membership_routes import membership_bp
+from app.routes.user_routes import user_bp
+from app.routes.admin_user_routes import admin_user_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(membership_bp)
+app.register_blueprint(user_bp)
+app.register_blueprint(admin_user_bp)

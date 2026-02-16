@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import os
+import re
 import traceback
 from functools import wraps
 from typing import Any, Dict, Optional
@@ -23,6 +24,24 @@ from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import execute_sql, fetch_all, fetch_one, safe_db_error
+
+_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+
+
+def _verify_stored_password(stored_hash: str, password: str) -> bool:
+    """Verifica senha contra hash armazenado (suporta werkzeug e SHA256 legado)."""
+    if _SHA256_RE.match(stored_hash):
+        return hashlib.sha256(password.encode("utf-8")).hexdigest() == stored_hash
+    return check_password_hash(stored_hash, password)
+
+
+def _upgrade_password_hash(user_id: int, password: str) -> None:
+    """Atualiza hash SHA256 legado para werkzeug scrypt."""
+    new_hash = generate_password_hash(password)
+    execute_sql(
+        "UPDATE users SET password_hash = :hash WHERE id = :id",
+        {"hash": new_hash, "id": user_id},
+    )
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -123,8 +142,18 @@ def _user_to_dto(row: Dict[str, Any]) -> Dict[str, Any]:
         "nickname": row.get("nickname"),
         "email": row["email"],
         "phone": row.get("phone"),
+        "cpf": row.get("cpf"),
+        "cnpj": row.get("cnpj"),
         "avatarUrl": row.get("avatar_url"),
         "bio": row.get("bio"),
+        "cep": row.get("cep"),
+        "logradouro": row.get("logradouro"),
+        "numero": row.get("numero"),
+        "bairro": row.get("bairro"),
+        "complemento": row.get("complemento"),
+        "city": row.get("city"),
+        "state": row.get("state"),
+        "timezone": row.get("timezone"),
         "isActive": bool(row.get("is_active", True)),
         "createdAt": row.get("created_at").isoformat() if row.get("created_at") else None,
         "lastLoginAt": row.get("last_login_at").isoformat() if row.get("last_login_at") else None,
@@ -214,6 +243,17 @@ def register():
         password = data.get("password") or ""
         nickname = (data.get("nickname") or "").strip() or None
         phone = (data.get("phone") or "").strip() or None
+        cpf = (data.get("cpf") or "").strip() or None
+        cnpj = (data.get("cnpj") or "").strip() or None
+        cep = (data.get("cep") or "").strip() or None
+        logradouro = (data.get("logradouro") or "").strip() or None
+        numero = (data.get("numero") or "").strip() or None
+        bairro = (data.get("bairro") or "").strip() or None
+        complemento = (data.get("complemento") or "").strip() or None
+        city = (data.get("city") or "").strip() or None
+        state = (data.get("state") or "").strip().upper()[:2] or None
+        tz = (data.get("timezone") or "").strip() or None
+        interests = data.get("interests") or []
 
         # Validações
         if not name:
@@ -235,20 +275,52 @@ def register():
 
         execute_sql(
             """
-            INSERT INTO users (name, nickname, email, phone, password_hash)
-            VALUES (:name, :nickname, :email, :phone, :password_hash)
+            INSERT INTO users (
+                name, nickname, email, phone, cpf, cnpj,
+                cep, logradouro, numero, bairro, complemento,
+                city, state, timezone, password_hash
+            ) VALUES (
+                :name, :nickname, :email, :phone, :cpf, :cnpj,
+                :cep, :logradouro, :numero, :bairro, :complemento,
+                :city, :state, :timezone, :password_hash
+            )
             """,
             {
                 "name": name,
                 "nickname": nickname,
                 "email": email,
                 "phone": phone,
+                "cpf": cpf,
+                "cnpj": cnpj,
+                "cep": cep,
+                "logradouro": logradouro,
+                "numero": numero,
+                "bairro": bairro,
+                "complemento": complemento,
+                "city": city,
+                "state": state,
+                "timezone": tz,
                 "password_hash": password_hash,
             },
         )
 
         # Buscar usuário criado
         user = fetch_one("SELECT * FROM users WHERE email = :email", {"email": email})
+
+        # Salvar interesses (lead capture)
+        if interests:
+            for sys_id in interests:
+                try:
+                    execute_sql(
+                        """
+                        INSERT INTO user_interests (user_id, system_id)
+                        VALUES (:user_id, :system_id)
+                        ON DUPLICATE KEY UPDATE created_at = created_at
+                        """,
+                        {"user_id": user["id"], "system_id": int(sys_id)},
+                    )
+                except Exception:
+                    pass  # ignora system_id inválido
 
         # Gerar token
         token = _create_token(user["id"], email)
@@ -286,8 +358,12 @@ def login():
         if not user:
             return jsonify({"error": "Credenciais inválidas"}), 401
 
-        if not check_password_hash(user["password_hash"], password):
+        if not _verify_stored_password(user["password_hash"], password):
             return jsonify({"error": "Credenciais inválidas"}), 401
+
+        # Auto-upgrade: SHA256 legado → werkzeug scrypt
+        if _SHA256_RE.match(user["password_hash"]):
+            _upgrade_password_hash(user["id"], password)
 
         if not user.get("is_active", True):
             return jsonify({"error": "Conta desativada"}), 403
@@ -329,10 +405,18 @@ def login():
             {"user_id": user["id"]},
         )
 
+        # Verificar se é super admin
+        sa_row = fetch_one(
+            "SELECT 1 FROM super_admins WHERE email = :email AND is_active = TRUE",
+            {"email": email},
+        )
+        is_super_admin = bool(sa_row)
+
         return jsonify({
             "message": "Login realizado com sucesso!",
             "token": token,
             "user": _user_to_dto(user),
+            "isSuperAdmin": is_super_admin,
             "tenants": [
                 {
                     "id": t["id"],
@@ -418,8 +502,16 @@ def get_me():
             {"user_id": g.current_user_id},
         )
 
+        # Verificar se é super admin
+        sa_row = fetch_one(
+            "SELECT 1 FROM super_admins WHERE email = :email AND is_active = TRUE",
+            {"email": g.current_user["email"]},
+        )
+        is_super_admin = bool(sa_row)
+
         return jsonify({
             "user": _user_to_dto(g.current_user),
+            "isSuperAdmin": is_super_admin,
             "currentTenantId": g.current_tenant_id,
             "tenants": [
                 {
@@ -475,6 +567,47 @@ def update_me():
             updates.append("bio = :bio")
             params["bio"] = (data["bio"] or "").strip() or None
 
+        if "cpf" in data:
+            updates.append("cpf = :cpf")
+            params["cpf"] = (data["cpf"] or "").strip() or None
+
+        if "cnpj" in data:
+            updates.append("cnpj = :cnpj")
+            params["cnpj"] = (data["cnpj"] or "").strip() or None
+
+        if "cep" in data:
+            updates.append("cep = :cep")
+            params["cep"] = (data["cep"] or "").strip() or None
+
+        if "logradouro" in data:
+            updates.append("logradouro = :logradouro")
+            params["logradouro"] = (data["logradouro"] or "").strip() or None
+
+        if "numero" in data:
+            updates.append("numero = :numero")
+            params["numero"] = (data["numero"] or "").strip() or None
+
+        if "bairro" in data:
+            updates.append("bairro = :bairro")
+            params["bairro"] = (data["bairro"] or "").strip() or None
+
+        if "complemento" in data:
+            updates.append("complemento = :complemento")
+            params["complemento"] = (data["complemento"] or "").strip() or None
+
+        if "city" in data:
+            updates.append("city = :city")
+            params["city"] = (data["city"] or "").strip() or None
+
+        if "state" in data:
+            updates.append("state = :state")
+            val = (data["state"] or "").strip().upper()
+            params["state"] = val[:2] if val else None
+
+        if "timezone" in data:
+            updates.append("timezone = :timezone")
+            params["timezone"] = (data["timezone"] or "").strip() or None
+
         if "avatarUrl" in data:
             updates.append("avatar_url = :avatar_url")
             params["avatar_url"] = (data["avatarUrl"] or "").strip() or None
@@ -518,8 +651,8 @@ def change_password():
         if len(new_password) < 6:
             return jsonify({"error": "Nova senha deve ter no mínimo 6 caracteres"}), 400
 
-        # Verificar senha atual
-        if not check_password_hash(g.current_user["password_hash"], current_password):
+        # Verificar senha atual (suporta SHA256 legado e werkzeug)
+        if not _verify_stored_password(g.current_user["password_hash"], current_password):
             return jsonify({"error": "Senha atual incorreta"}), 401
 
         # Atualizar senha
@@ -543,6 +676,71 @@ def change_password():
 
         return jsonify({"message": "Senha alterada com sucesso"})
 
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@auth_bp.get("/me/interests")
+@login_required
+def get_my_interests():
+    """Lista interesses do usuário logado."""
+    try:
+        rows = fetch_all(
+            """
+            SELECT ui.system_id, s.slug, s.display_name, s.icon, s.color
+            FROM user_interests ui
+            INNER JOIN systems s ON s.id = ui.system_id
+            WHERE ui.user_id = :user_id
+            ORDER BY s.display_order, s.id
+            """,
+            {"user_id": g.current_user_id},
+        )
+        return jsonify([
+            {
+                "systemId": r["system_id"],
+                "slug": r["slug"],
+                "displayName": r["display_name"],
+                "icon": r["icon"],
+                "color": r["color"],
+            }
+            for r in rows
+        ])
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@auth_bp.put("/me/interests")
+@login_required
+def update_my_interests():
+    """Atualiza interesses do usuário (recebe { systemIds: [1,2,3] })."""
+    try:
+        data = request.get_json(silent=True) or {}
+        system_ids = data.get("systemIds") or []
+
+        # Limpar interesses antigos
+        execute_sql(
+            "DELETE FROM user_interests WHERE user_id = :user_id",
+            {"user_id": g.current_user_id},
+        )
+
+        # Inserir novos
+        for sys_id in system_ids:
+            try:
+                execute_sql(
+                    """
+                    INSERT INTO user_interests (user_id, system_id)
+                    VALUES (:user_id, :system_id)
+                    """,
+                    {"user_id": g.current_user_id, "system_id": int(sys_id)},
+                )
+            except Exception:
+                pass  # ignora system_id inválido
+
+        return jsonify({"message": "Interesses atualizados com sucesso"})
     except Exception as e:
         if ENV == "dev":
             traceback.print_exc()

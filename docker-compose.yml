@@ -29,6 +29,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        API_PORT: ${SELETOR_API_PORT:-22012}
     container_name: seletor-sistema-api
     env_file:
       - .env
@@ -38,17 +40,18 @@ services:
       FLASK_ENV: ${FLASK_ENV}
       SECRET_KEY: ${SECRET_KEY}
       PYTHONPATH: /app
+      SELETOR_API_PORT: ${SELETOR_API_PORT:-22012}
     volumes:
       - ./backend/uploads:/uploads
       - ./backend:/app
       - ./frontend/dist:/app/frontend/dist
     command: >
       gunicorn -w 2 -k gthread --threads 8 --timeout 60 --keep-alive 5
-      -b 0.0.0.0:22012 "app.main:app"
+      -b 0.0.0.0:${SELETOR_API_PORT:-22012} "app.main:app"
     expose:
-      - "22012"
+      - "${SELETOR_API_PORT:-22012}"
     ports:
-      - "22012:22012"
+      - "${SELETOR_API_PORT:-22012}:${SELETOR_API_PORT:-22012}"
     depends_on:
       db:
         condition: service_healthy
@@ -58,37 +61,26 @@ services:
       - nginx-proxy
 
   # ==========================================
-  # FRONTEND - React Dev (opcional)
+  # FRONTEND - React (nginx prod build)
   # ==========================================
   web:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: seletor-sistema-web
-    env_file:
-      - ./frontend/.env
-    #command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "22011", "--strictPort"]
-    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 22011"]
-
-    volumes:
-      - ./frontend:/app
-      - web_node_modules:/app/node_modules
     expose:
-      - "22011"
+      - "${SELETOR_WEB_PORT:-22011}"
     ports:
-      - "22011:22011"
+      - "${SELETOR_WEB_PORT:-22011}:${SELETOR_WEB_PORT:-22011}"
     depends_on:
       - api
     restart: unless-stopped
-    # profiles:
-    #   - dev
     networks:
       - seletor-net
       - nginx-proxy
 
 volumes:
   db_data:
-  web_node_modules:
 
 networks:
   seletor-net:
@@ -96,4 +88,3 @@ networks:
   nginx-proxy:
     external: true
     name: nginx-proxy
-    

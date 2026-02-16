@@ -45,7 +45,7 @@ export function SuperAdmin() {
   // Função para buscar a lista
   const fetchTenants = async () => {
     try {
-      const res = await fetch('https://varzeaprime.com.br/seletor-api/api/super-admin/tenants', {
+      const res = await fetch('/seletor-api/api/super-admin/tenants', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -62,7 +62,7 @@ export function SuperAdmin() {
     setLoginError('');
 
     try {
-      const res = await fetch('https://varzeaprime.com.br/seletor-api/api/super-admin/login', {
+      const res = await fetch('/seletor-api/api/super-admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -94,7 +94,7 @@ export function SuperAdmin() {
     setStatus({ type: null, message: '' });
 
     try {
-      const response = await fetch('https://varzeaprime.com.br/seletor-api/api/super-admin/create-tenant', {
+      const response = await fetch('/seletor-api/api/super-admin/create-tenant', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +126,7 @@ export function SuperAdmin() {
     if (!window.confirm(`TEM CERTEZA? Isso apagará o banco de dados do sistema "${name}" permanentemente!`)) return;
 
     try {
-      const res = await fetch(`https://varzeaprime.com.br/seletor-api/api/super-admin/tenants/${id}`, {
+      const res = await fetch(`/seletor-api/api/super-admin/tenants/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

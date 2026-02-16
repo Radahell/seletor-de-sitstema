@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Mail, Phone, Edit2, Save, X, Key, LogOut,
-  Trash2, Loader2, Check, AlertCircle
+  Loader2, Check, AlertCircle, MapPin
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import api, { ApiError } from '../services/api';
+import api, { ApiError, type SystemInfo, type UserInterest } from '../services/api';
+import { ESTADOS, fetchCidadesByUF, getTimezoneByUF, type Cidade } from '../lib/ibge';
+import { fetchAddressByCep } from '../lib/viacep';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -21,22 +23,118 @@ export default function ProfilePage() {
   const [nickname, setNickname] = useState(user?.nickname || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [bio, setBio] = useState(user?.bio || '');
+  const [cpf, setCpf] = useState(user?.cpf || '');
+  const [cnpj, setCnpj] = useState(user?.cnpj || '');
+  const [cep, setCep] = useState(user?.cep || '');
+  const [logradouro, setLogradouro] = useState(user?.logradouro || '');
+  const [numero, setNumero] = useState(user?.numero || '');
+  const [bairro, setBairro] = useState(user?.bairro || '');
+  const [complemento, setComplemento] = useState(user?.complemento || '');
+  const [city, setCity] = useState(user?.city || '');
+  const [state, setState] = useState(user?.state || '');
+  const [cidades, setCidades] = useState<Cidade[]>([]);
+  const [loadingCidades, setLoadingCidades] = useState(false);
+  const [loadingCep, setLoadingCep] = useState(false);
+
+  // Interests
+  const [systems, setSystems] = useState<SystemInfo[]>([]);
+  const [selectedInterests, setSelectedInterests] = useState<number[]>([]);
+  const [savingInterests, setSavingInterests] = useState(false);
 
   // Password fields
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // Carrega sistemas e interesses
+  useEffect(() => {
+    api.getSystems().then(setSystems).catch(() => {});
+    api.getMyInterests().then((list) => {
+      setSelectedInterests(list.map((i) => i.systemId));
+    }).catch(() => {});
+  }, []);
+
+  // Busca cidades quando o estado muda
+  useEffect(() => {
+    if (!state) {
+      setCidades([]);
+      return;
+    }
+    setLoadingCidades(true);
+    fetchCidadesByUF(state)
+      .then((list) => {
+        setCidades(list);
+        if (city && !list.some((c) => c.nome === city)) {
+          setCity('');
+        }
+      })
+      .finally(() => setLoadingCidades(false));
+  }, [state]);
+
+  // Carrega cidades iniciais se já tem estado definido
+  useEffect(() => {
+    if (user?.state) {
+      fetchCidadesByUF(user.state).then(setCidades);
+    }
+  }, []);
+
+  const handleCepChange = async (value: string) => {
+    setCep(value);
+    const clean = value.replace(/\D/g, '');
+    if (clean.length === 8) {
+      setLoadingCep(true);
+      const addr = await fetchAddressByCep(clean);
+      if (addr) {
+        setLogradouro(addr.logradouro);
+        setBairro(addr.bairro);
+        setCity(addr.localidade);
+        setState(addr.uf);
+      }
+      setLoadingCep(false);
+    }
+  };
+
+  const toggleInterest = (systemId: number) => {
+    setSelectedInterests((prev) =>
+      prev.includes(systemId)
+        ? prev.filter((id) => id !== systemId)
+        : [...prev, systemId]
+    );
+  };
+
+  const handleSaveInterests = async () => {
+    setSavingInterests(true);
+    try {
+      await api.updateMyInterests(selectedInterests);
+      setMessage({ type: 'success', text: 'Interesses atualizados!' });
+    } catch {
+      setMessage({ type: 'error', text: 'Erro ao salvar interesses.' });
+    } finally {
+      setSavingInterests(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setMessage(null);
 
     try {
+      const timezone = state ? getTimezoneByUF(state) : undefined;
       await api.updateProfile({
         name,
         nickname: nickname || undefined,
         phone: phone || undefined,
         bio: bio || undefined,
+        cpf: cpf || undefined,
+        cnpj: cnpj || undefined,
+        cep: cep || undefined,
+        logradouro: logradouro || undefined,
+        numero: numero || undefined,
+        bairro: bairro || undefined,
+        complemento: complemento || undefined,
+        city: city || undefined,
+        state: state || undefined,
+        timezone,
       });
 
       await refreshUser();
@@ -84,8 +182,29 @@ export default function ProfilePage() {
     setNickname(user?.nickname || '');
     setPhone(user?.phone || '');
     setBio(user?.bio || '');
+    setCpf(user?.cpf || '');
+    setCnpj(user?.cnpj || '');
+    setCep(user?.cep || '');
+    setLogradouro(user?.logradouro || '');
+    setNumero(user?.numero || '');
+    setBairro(user?.bairro || '');
+    setComplemento(user?.complemento || '');
+    setCity(user?.city || '');
+    setState(user?.state || '');
     setIsEditing(false);
   };
+
+  // Formata endereço para exibição read-only
+  const formattedAddress = [
+    logradouro || user?.logradouro,
+    (numero || user?.numero) && `n${"\u00BA"} ${numero || user?.numero}`,
+    bairro || user?.bairro,
+  ].filter(Boolean).join(', ');
+
+  const formattedLocation = [
+    user?.city,
+    user?.state && `${user.state}`,
+  ].filter(Boolean).join('/');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 px-4 py-8">
@@ -190,6 +309,35 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
+                      CPF
+                    </label>
+                    <input
+                      type="text"
+                      value={cpf}
+                      onChange={(e) => setCpf(e.target.value)}
+                      placeholder="000.000.000-00"
+                      maxLength={14}
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
+                      CNPJ
+                    </label>
+                    <input
+                      type="text"
+                      value={cnpj}
+                      onChange={(e) => setCnpj(e.target.value)}
+                      placeholder="00.000.000/0000-00"
+                      maxLength={18}
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
                     Bio
@@ -201,6 +349,87 @@ export default function ProfilePage() {
                     rows={3}
                     className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none resize-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Endereço
+                  </label>
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={cep}
+                        onChange={(e) => handleCepChange(e.target.value)}
+                        placeholder="CEP (auto-preenche)"
+                        maxLength={9}
+                        className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none"
+                      />
+                      {loadingCep && (
+                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 animate-spin" />
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={logradouro}
+                      onChange={(e) => setLogradouro(e.target.value)}
+                      placeholder="Logradouro"
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none"
+                    />
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        value={numero}
+                        onChange={(e) => setNumero(e.target.value)}
+                        placeholder="N"
+                        className="w-24 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={bairro}
+                        onChange={(e) => setBairro(e.target.value)}
+                        placeholder="Bairro"
+                        className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={complemento}
+                      onChange={(e) => setComplemento(e.target.value)}
+                      placeholder="Complemento"
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none"
+                    />
+                    <div className="flex gap-3">
+                      <select
+                        value={state}
+                        onChange={(e) => {
+                          setState(e.target.value);
+                          setCity('');
+                        }}
+                        className="w-24 px-3 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:border-red-500 focus:outline-none appearance-none cursor-pointer"
+                      >
+                        <option value="">UF</option>
+                        {ESTADOS.map((e) => (
+                          <option key={e.sigla} value={e.sigla}>{e.sigla}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        disabled={!state || loadingCidades}
+                        className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white focus:border-red-500 focus:outline-none disabled:opacity-40 appearance-none cursor-pointer"
+                      >
+                        <option value="">
+                          {loadingCidades ? 'Carregando...' : state ? 'Selecione a cidade' : 'Selecione o UF primeiro'}
+                        </option>
+                        {cidades.map((c) => (
+                          <option key={c.id} value={c.nome}>{c.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-4">
@@ -253,11 +482,85 @@ export default function ProfilePage() {
                       <span>{user.phone}</span>
                     </div>
                   )}
+
+                  {(user?.cpf || user?.cnpj) && (
+                    <div className="flex items-center gap-3 text-zinc-400">
+                      <User className="w-5 h-5" />
+                      <span>
+                        {user.cpf && `CPF: ${user.cpf}`}
+                        {user.cpf && user.cnpj && ' | '}
+                        {user.cnpj && `CNPJ: ${user.cnpj}`}
+                      </span>
+                    </div>
+                  )}
+
+                  {(user?.logradouro || user?.city) && (
+                    <div className="flex items-start gap-3 text-zinc-400">
+                      <MapPin className="w-5 h-5 mt-0.5" />
+                      <div>
+                        {user.logradouro && (
+                          <span>
+                            {user.logradouro}
+                            {user.numero && `, n\u00BA ${user.numero}`}
+                            {user.bairro && ` - ${user.bairro}`}
+                          </span>
+                        )}
+                        {user.complemento && (
+                          <span className="text-zinc-500"> ({user.complemento})</span>
+                        )}
+                        {(user.city || user.state) && (
+                          <div className="text-zinc-500">
+                            {user.city}{user.state && `/${user.state}`}
+                            {user.cep && ` - CEP ${user.cep}`}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}
           </div>
         </div>
+
+        {/* Interests Card */}
+        {systems.length > 0 && (
+          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 mb-3">
+              Serviços de interesse
+            </h3>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {systems.map((sys) => (
+                <button
+                  key={sys.id}
+                  type="button"
+                  onClick={() => toggleInterest(sys.id)}
+                  className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all border ${
+                    selectedInterests.includes(sys.id)
+                      ? 'border-red-500 bg-red-500/10 text-white'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600'
+                  }`}
+                >
+                  {sys.displayName}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleSaveInterests}
+              disabled={savingInterests}
+              className="w-full py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-sm font-bold hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {savingInterests ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Salvar interesses
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-2">

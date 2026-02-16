@@ -135,6 +135,18 @@ class ApiService {
     });
   }
 
+  // Interests endpoints
+  async getMyInterests() {
+    return this.request<UserInterest[]>('/api/auth/me/interests');
+  }
+
+  async updateMyInterests(systemIds: number[]) {
+    return this.request<{ message: string }>('/api/auth/me/interests', {
+      method: 'PUT',
+      body: JSON.stringify({ systemIds }),
+    });
+  }
+
   // Systems endpoints (public)
   async getSystems() {
     return this.request<SystemInfo[]>('/api/systems', { skipAuth: true });
@@ -161,14 +173,25 @@ export interface User {
   nickname?: string;
   email: string;
   phone?: string;
+  cpf?: string;
+  cnpj?: string;
   avatarUrl?: string;
   bio?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
+  city?: string;
+  state?: string;
+  timezone?: string;
   isActive: boolean;
   createdAt?: string;
   lastLoginAt?: string;
 }
 
 export interface SystemInfo {
+  id: number;
   slug: string;
   displayName: string;
   icon: string;
@@ -209,25 +232,56 @@ export interface RegisterData {
   password: string;
   nickname?: string;
   phone?: string;
+  cpf?: string;
+  cnpj?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
+  city?: string;
+  state?: string;
+  timezone?: string;
+  interests?: number[];
 }
 
 export interface UpdateProfileData {
   name?: string;
   nickname?: string;
   phone?: string;
+  cpf?: string;
+  cnpj?: string;
   bio?: string;
   avatarUrl?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
+  city?: string;
+  state?: string;
+  timezone?: string;
+}
+
+export interface UserInterest {
+  systemId: number;
+  slug: string;
+  displayName: string;
+  icon: string;
+  color: string;
 }
 
 export interface AuthResponse {
   message: string;
   token: string;
   user: User;
+  isSuperAdmin?: boolean;
   tenants?: TenantInfo[];
 }
 
 export interface MeResponse {
   user: User;
+  isSuperAdmin?: boolean;
   currentTenantId?: number;
   tenants: TenantInfo[];
 }

@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 # Código (em runtime é sobreposto pelo volume do docker-compose)
 COPY backend /app
 
-EXPOSE 22012
+ARG API_PORT=22012
+ENV API_PORT=${API_PORT}
+EXPOSE ${API_PORT}
 
-CMD ["gunicorn", "-b", "0.0.0.0:22012", "-w", "2", "--threads", "4", "app.main:app"]
+CMD gunicorn -b 0.0.0.0:${API_PORT} -w 2 --threads 4 "app.main:app"

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Video, Play, Download, Clock, Camera,
-  Loader2, RefreshCw, Film, Eye
+  Loader2, RefreshCw, Film, Eye, Smartphone, ExternalLink, Trash2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import SwitchSystemMenu from '../components/SwitchSystemMenu';
@@ -36,12 +36,14 @@ interface RecordingInfo {
 
 interface SessionInfo {
   id: string;
-  tenant_slug: string;
   device_name: string;
-  cameras: string[];
-  is_recording: boolean;
+  channel: string;
   started_at: string;
   total_bytes: number;
+  tenant_id?: string;
+  user_id?: number;
+  mode: string;
+  uptime_seconds: number;
 }
 
 type TabType = 'live' | 'clips' | 'recordings';
@@ -100,7 +102,7 @@ export default function LancesPage() {
       } else if (activeTab === 'live') {
         try {
           const data = await sclFetch<SessionInfo[]>(
-            '/api/fieldcam/sessions', token
+            '/api/athlete/sessions', token
           );
           setSessions(Array.isArray(data) ? data : []);
         } catch {
@@ -194,6 +196,27 @@ export default function LancesPage() {
     }
   };
 
+  const handleDeleteClip = async (clipId: string) => {
+    if (!token) return;
+    if (!window.confirm('Excluir este lance permanentemente?')) return;
+    try {
+      const resp = await fetch(`${SCL_API}/api/athlete/clips/${clipId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || 'Erro ao excluir');
+      }
+      setClips(prev => prev.filter(c => c.id !== clipId));
+    } catch (err: any) {
+      setError(err.message || 'Erro ao excluir lance');
+    }
+  };
+
   const tabs: { key: TabType; label: string; icon: typeof Video }[] = [
     { key: 'clips', label: 'Meus Lances', icon: Film },
     { key: 'recordings', label: 'Gravações', icon: Video },
@@ -257,6 +280,23 @@ export default function LancesPage() {
             );
           })}
         </div>
+      </div>
+
+      {/* Phone as Camera */}
+      <div className="max-w-6xl mx-auto px-4 mt-4">
+        <a
+          href={token ? `${SCL_API}/camera/?hub_token=${encodeURIComponent(token)}` : '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`w-full flex items-center gap-3 p-4 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 transition-all no-underline ${!token ? 'opacity-50 pointer-events-none' : ''}`}
+        >
+          <Smartphone className="w-6 h-6 text-white" />
+          <div className="flex-1 text-left">
+            <p className="text-white font-semibold text-sm">Usar Celular como Camera</p>
+            <p className="text-emerald-100 text-xs">Toque para iniciar sua camera pessoal</p>
+          </div>
+          <ExternalLink className="w-4 h-4 text-white/60" />
+        </a>
       </div>
 
       {/* Content */}
@@ -337,24 +377,33 @@ export default function LancesPage() {
                           )}
 
                           {/* Actions */}
-                          {clip.status === 'ready' && (
-                            <div className="flex gap-2 mt-3">
-                              <button
-                                onClick={() => handleStreamClip(clip.id)}
-                                className="flex-1 py-2 rounded-lg bg-purple-500/10 text-purple-400 text-xs font-bold hover:bg-purple-500/20 transition-colors flex items-center justify-center gap-1"
-                              >
-                                <Eye className="w-3 h-3" />
-                                Assistir
-                              </button>
-                              <button
-                                onClick={() => handleDownloadClip(clip.id)}
-                                className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-400 text-xs font-bold hover:bg-zinc-700 transition-colors flex items-center justify-center gap-1"
-                              >
-                                <Download className="w-3 h-3" />
-                                Baixar
-                              </button>
-                            </div>
-                          )}
+                          <div className="flex gap-2 mt-3">
+                            {clip.status === 'ready' && (
+                              <>
+                                <button
+                                  onClick={() => handleStreamClip(clip.id)}
+                                  className="flex-1 py-2 rounded-lg bg-purple-500/10 text-purple-400 text-xs font-bold hover:bg-purple-500/20 transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  Assistir
+                                </button>
+                                <button
+                                  onClick={() => handleDownloadClip(clip.id)}
+                                  className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-400 text-xs font-bold hover:bg-zinc-700 transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  Baixar
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => handleDeleteClip(clip.id)}
+                              className="py-2 px-3 rounded-lg bg-red-500/10 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -466,21 +515,20 @@ export default function LancesPage() {
                         <div className="p-4">
                           <h3 className="font-bold text-white">{session.device_name || 'Câmera'}</h3>
                           <p className="text-xs text-zinc-500 mt-1">
-                            {session.cameras.length} câmera{session.cameras.length > 1 ? 's' : ''}
+                            {session.channel || 'cam_a'}
                             {' · '}
                             Desde {formatDate(session.started_at)}
                           </p>
 
-                          <button
-                            onClick={() => {
-                              const url = `${SCL_API}/api/streaming/sessions/${session.id}/master.m3u8`;
-                              window.open(url, '_blank');
-                            }}
-                            className="mt-3 w-full py-2 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+                          <a
+                            href={`${SCL_API}/viewer/?session=${session.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-3 w-full py-2 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors flex items-center justify-center gap-2 no-underline"
                           >
                             <Play className="w-4 h-4" />
                             Assistir
-                          </button>
+                          </a>
                         </div>
                       </div>
                     ))}
