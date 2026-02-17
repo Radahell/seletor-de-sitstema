@@ -49,7 +49,7 @@ const SYSTEM_LABELS: Record<string, {
   },
 };
 
-const WHATSAPP_NUMBER = '5567999999999'; // TODO: ajustar numero real
+const WHATSAPP_NUMBER = '5567992247898';
 
 export default function SystemAreaPage() {
   const navigate = useNavigate();
