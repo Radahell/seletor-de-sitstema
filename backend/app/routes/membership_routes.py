@@ -10,18 +10,150 @@ Endpoints:
 """
 from __future__ import annotations
 
+import json
 import os
 import traceback
 from typing import Any, Dict
+from urllib.request import Request, urlopen
 
 from flask import Blueprint, g, jsonify, request
+from sqlalchemy import create_engine, text
 
-from app.db import execute_sql, fetch_all, fetch_one, safe_db_error
+from app.db import (
+    execute_sql, fetch_all, fetch_one, safe_db_error,
+    build_tenant_database_url, TENANT_DB_HOST,
+)
 from app.routes.auth_routes import login_required
 
 membership_bp = Blueprint("membership", __name__)
 
 ENV = os.getenv("ENV", "dev")
+
+# Sistemas que auto-aprovam (não precisam de aprovação do admin)
+AUTO_APPROVE_SYSTEMS = {"quadra"}
+
+
+def _notify_tenant_admins_push(tenant, user_name: str, message: str):
+    """
+    Envia push notification para os admins do tenant quando alguém solicita acesso.
+    Busca push_tokens direto do banco do tenant.
+    """
+    try:
+        tenant_id = tenant["id"]
+        db_name = tenant.get("database_name")
+        db_host = tenant.get("database_host") or TENANT_DB_HOST
+
+        if not db_name:
+            print(f"[push-join] Tenant {tenant_id} sem database_name, skip")
+            return
+
+        # 1) Buscar user_ids dos admins deste tenant no hub
+        admins = fetch_all(
+            """
+            SELECT user_id FROM user_tenants
+            WHERE tenant_id = :tenant_id AND role = 'admin' AND is_active = TRUE
+            """,
+            {"tenant_id": tenant_id},
+        )
+        if not admins:
+            print(f"[push-join] Nenhum admin ativo no tenant {tenant_id}")
+            return
+
+        admin_hub_ids = [a["user_id"] for a in admins]
+        print(f"[push-join] Admins do hub para tenant {tenant_id}: {admin_hub_ids}")
+
+        # 2) Para cada admin do hub, buscar fk_id_user_hub no banco do tenant
+        #    e pegar push_tokens
+        url = build_tenant_database_url(db_host, db_name)
+        engine = create_engine(url, pool_pre_ping=True, future=True)
+
+        all_tokens = []
+        with engine.connect() as conn:
+            # Verifica se tabelas existem
+            tables = [r[0] for r in conn.execute(text(
+                "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+                "WHERE TABLE_SCHEMA = :db AND TABLE_NAME IN ('users', 'push_tokens')"
+            ), {"db": db_name}).fetchall()]
+
+            if "push_tokens" not in tables or "users" not in tables:
+                print(f"[push-join] Tabelas users/push_tokens não existem em {db_name}")
+                engine.dispose()
+                return
+
+            # Buscar user_ids locais dos admins via fk_id_user_hub
+            placeholders = ",".join(str(uid) for uid in admin_hub_ids)
+            local_admins = conn.execute(text(
+                f"SELECT id FROM users WHERE fk_id_user_hub IN ({placeholders})"
+            )).fetchall()
+
+            if not local_admins:
+                # Fallback: buscar por is_admin = 1
+                local_admins = conn.execute(text(
+                    "SELECT id FROM users WHERE is_admin = 1"
+                )).fetchall()
+
+            local_admin_ids = [r[0] for r in local_admins]
+            if not local_admin_ids:
+                print(f"[push-join] Nenhum admin local encontrado em {db_name}")
+                engine.dispose()
+                return
+
+            # Buscar push tokens
+            id_list = ",".join(str(uid) for uid in local_admin_ids)
+            tokens = conn.execute(text(
+                f"SELECT token FROM push_tokens WHERE user_id IN ({id_list})"
+            )).fetchall()
+            all_tokens = [r[0] for r in tokens if r[0]]
+
+        engine.dispose()
+
+        if not all_tokens:
+            print(f"[push-join] Nenhum push token encontrado para admins de {db_name}")
+            return
+
+        # 3) Enviar via Expo Push API
+        expo_tokens = [t for t in all_tokens if "ExponentPushToken" in t]
+        title = "Nova solicitação de acesso"
+        body = f"{user_name} quer entrar no {tenant.get('display_name', 'sistema')}. {message}".strip()
+
+        if expo_tokens:
+            payload = [
+                {
+                    "to": token,
+                    "title": title,
+                    "body": body,
+                    "sound": "default",
+                    "data": {"type": "join_request", "tenant_id": tenant_id},
+                    "channelId": "default",
+                    "priority": "high",
+                }
+                for token in expo_tokens
+            ]
+            req = Request(
+                "https://exp.host/--/api/v2/push/send",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                method="POST",
+            )
+            try:
+                with urlopen(req, timeout=10) as response:
+                    resp_body = json.loads(response.read().decode("utf-8"))
+                    print(f"[push-join] Expo OK: {len(expo_tokens)} token(s), resp={resp_body}")
+            except Exception as exc:
+                print(f"[push-join] Expo ERRO: {exc}")
+
+        # FCM tokens (não-Expo) - skip por agora, Expo API é suficiente
+        non_expo = [t for t in all_tokens if "ExponentPushToken" not in t]
+        if non_expo:
+            print(f"[push-join] {len(non_expo)} token(s) FCM ignorados (sem Firebase Admin no seletor)")
+
+    except Exception as e:
+        print(f"[push-join] Erro ao enviar push: {e}")
+        if ENV == "dev":
+            traceback.print_exc()
 
 
 # ------------------------------------------------------------
@@ -182,6 +314,23 @@ def join_tenant():
                 "tenant": _tenant_to_dto(tenant),
             })
 
+        system_slug = tenant.get("system_slug", "")
+
+        # Sistemas que auto-aprovam (ex: quadra) - entrada direta como client
+        if system_slug in AUTO_APPROVE_SYSTEMS:
+            execute_sql(
+                """
+                INSERT INTO user_tenants (user_id, tenant_id, role)
+                VALUES (:user_id, :tenant_id, 'client')
+                """,
+                {"user_id": g.current_user_id, "tenant_id": tenant["id"]},
+            )
+
+            return jsonify({
+                "message": f"Você entrou no {tenant['display_name']}!",
+                "tenant": _tenant_to_dto(tenant),
+            }), 201
+
         # Verificar se precisa aprovação
         if not tenant.get("allow_registration", True):
             # Criar solicitação
@@ -201,13 +350,21 @@ def join_tenant():
                 },
             )
 
+            # Enviar push notification para admins do tenant
+            user_row = fetch_one(
+                "SELECT name, email FROM users WHERE id = :id",
+                {"id": g.current_user_id},
+            )
+            user_name = user_row["name"] if user_row else "Alguém"
+            _notify_tenant_admins_push(tenant, user_name, message)
+
             return jsonify({
                 "message": "Solicitação enviada! Aguarde aprovação do administrador.",
                 "status": "pending",
                 "tenant": _tenant_to_dto(tenant),
             }), 202
 
-        # Inscrição direta
+        # Inscrição direta (allow_registration = true)
         execute_sql(
             """
             INSERT INTO user_tenants (user_id, tenant_id, role)
