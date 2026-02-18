@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  LogOut, User, Loader2, RefreshCw, Shield, ChevronRight
+  LogOut, User, Loader2, RefreshCw, Shield, ChevronRight, Smartphone, Download
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import api, { SystemInfo, SystemWithTenants } from '../services/api';
@@ -19,6 +19,25 @@ const SYSTEM_DESCRIPTIONS: Record<string, string> = {
 };
 
 const HIDDEN_SYSTEMS = new Set(['arbitro']);
+
+const MOBILE_APPS = [
+  {
+    id: 'varzea-prime',
+    name: 'Varzea Prime',
+    description: 'Campeonatos, escalacoes e resultados na palma da mao',
+    color: '#ef4444',
+    apkUrl: '/downloads/AppVarzeaPrime.apk',
+    bgImage: '/img/campeonato_bg.png',
+  },
+  {
+    id: 'lance-de-ouro',
+    name: 'Lance de Ouro',
+    description: 'Operador de campo — cameras e gravacoes offline',
+    color: '#f59e0b',
+    apkUrl: '/downloads/AppLanceDeOuro.apk',
+    bgImage: '/img/lances_bg.png',
+  },
+];
 
 interface SystemCard extends SystemInfo {
   tenantCount: number;
@@ -238,6 +257,80 @@ export default function DashboardPage() {
               </button>
             );
           })}
+        </div>
+
+        {/* Mobile Apps Section */}
+        <div className="mt-14 max-w-4xl mx-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-px flex-1 bg-zinc-800" />
+            <div className="flex items-center gap-2 text-zinc-500">
+              <Smartphone className="w-4 h-4" />
+              <span className="text-xs font-bold uppercase tracking-widest">Nossos Apps</span>
+            </div>
+            <div className="h-px flex-1 bg-zinc-800" />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {MOBILE_APPS.map((app) => (
+              <a
+                key={app.id}
+                href={app.apkUrl}
+                download
+                className="group relative overflow-hidden rounded-2xl transition-all duration-500 hover:shadow-2xl hover:scale-[1.02] min-h-[150px]"
+              >
+                {/* Background Image */}
+                <img
+                  src={app.bgImage}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                />
+
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black/40" />
+
+                {/* Colored accent on hover */}
+                <div
+                  className="absolute inset-0 opacity-0 group-hover:opacity-15 transition-opacity duration-500"
+                  style={{ backgroundColor: app.color }}
+                />
+
+                {/* Badge */}
+                <div className="absolute top-3 right-3 z-10">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white bg-zinc-700/80 backdrop-blur-sm">
+                    Android
+                  </span>
+                </div>
+
+                {/* Content */}
+                <div className="relative z-10 h-full flex flex-col justify-end p-5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Smartphone className="w-4 h-4 text-white/70" />
+                    <h4 className="text-lg font-black text-white uppercase italic tracking-tight">
+                      {app.name}
+                    </h4>
+                  </div>
+
+                  <p className="text-xs text-zinc-300 font-medium mb-3">
+                    {app.description}
+                  </p>
+
+                  <span
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider text-white w-fit transition-all duration-300 group-hover:gap-2.5"
+                    style={{ backgroundColor: `${app.color}dd` }}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar APK
+                  </span>
+                </div>
+
+                {/* Bottom accent line */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ backgroundColor: app.color }}
+                />
+              </a>
+            ))}
+          </div>
         </div>
 
         {/* Footer */}

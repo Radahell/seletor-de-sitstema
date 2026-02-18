@@ -553,6 +553,288 @@ def delete_tenant(tenant_id: int):
         return jsonify({"error": "Erro ao deletar tenant"}), 500
 
 
+@app.patch("/api/super-admin/tenants/<int:tenant_id>")
+@token_required
+def update_tenant(tenant_id: int):
+    """Edita campos do tenant: display_name, primary_color, allow_registration, is_active."""
+    try:
+        tenant = fetch_one("SELECT id FROM tenants WHERE id = :id", {"id": tenant_id})
+        if not tenant:
+            return jsonify({"error": "Tenant não encontrado"}), 404
+
+        data = request.get_json(silent=True) or {}
+        allowed = {"display_name", "primary_color", "allow_registration", "is_active"}
+        sets = []
+        params: dict = {"id": tenant_id}
+
+        for field in allowed:
+            camel = field.replace("_", " ").title().replace(" ", "")
+            camel = camel[0].lower() + camel[1:]  # camelCase
+            if camel in data:
+                sets.append(f"{field} = :{field}")
+                params[field] = data[camel]
+
+        if not sets:
+            return jsonify({"error": "Nenhum campo para atualizar"}), 400
+
+        execute_sql(
+            f"UPDATE tenants SET {', '.join(sets)} WHERE id = :id",
+            params,
+        )
+        return jsonify({"message": "Tenant atualizado"})
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@app.get("/api/super-admin/tenants/<int:tenant_id>/admins")
+@token_required
+def list_tenant_admins(tenant_id: int):
+    """Lista usuários admin de um tenant (via user_tenants com role=admin)."""
+    try:
+        tenant = fetch_one(
+            "SELECT id, slug, display_name FROM tenants WHERE id = :id",
+            {"id": tenant_id},
+        )
+        if not tenant:
+            return jsonify({"error": "Tenant não encontrado"}), 404
+
+        admins = fetch_all(
+            """
+            SELECT u.id, u.name, u.email, u.phone, ut.role, ut.is_active,
+                   ut.joined_at
+            FROM user_tenants ut
+            INNER JOIN users u ON ut.user_id = u.id
+            WHERE ut.tenant_id = :tenant_id AND ut.role = 'admin'
+            ORDER BY u.name
+            """,
+            {"tenant_id": tenant_id},
+        )
+
+        return jsonify([
+            {
+                "id": a["id"],
+                "name": a["name"],
+                "email": a["email"],
+                "phone": a.get("phone"),
+                "role": a["role"],
+                "isActive": bool(a.get("is_active", True)),
+                "joinedAt": a["joined_at"].isoformat() if a.get("joined_at") else None,
+            }
+            for a in admins
+        ])
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@app.put("/api/super-admin/tenants/<int:tenant_id>/admins/<int:user_id>/role")
+@token_required
+def update_tenant_user_role(tenant_id: int, user_id: int):
+    """Altera role de um membro do tenant (admin/player/staff)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        new_role = data.get("role", "").strip()
+        if new_role not in ("admin", "player", "staff", "manager"):
+            return jsonify({"error": "Role inválido"}), 400
+
+        result = fetch_one(
+            "SELECT id FROM user_tenants WHERE tenant_id = :tid AND user_id = :uid",
+            {"tid": tenant_id, "uid": user_id},
+        )
+        if not result:
+            return jsonify({"error": "Usuário não é membro deste tenant"}), 404
+
+        execute_sql(
+            "UPDATE user_tenants SET role = :role WHERE tenant_id = :tid AND user_id = :uid",
+            {"role": new_role, "tid": tenant_id, "uid": user_id},
+        )
+        return jsonify({"message": f"Role atualizado para '{new_role}'"})
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@app.get("/api/super-admin/tenants/<int:tenant_id>/members")
+@token_required
+def list_tenant_members(tenant_id: int):
+    """Lista todos os membros de um tenant."""
+    try:
+        tenant = fetch_one("SELECT id FROM tenants WHERE id = :id", {"id": tenant_id})
+        if not tenant:
+            return jsonify({"error": "Tenant não encontrado"}), 404
+
+        members = fetch_all(
+            """
+            SELECT u.id, u.name, u.email, u.phone, ut.role, ut.is_active,
+                   ut.joined_at
+            FROM user_tenants ut
+            INNER JOIN users u ON ut.user_id = u.id
+            WHERE ut.tenant_id = :tenant_id
+            ORDER BY FIELD(ut.role, 'admin', 'manager', 'staff', 'player'), u.name
+            """,
+            {"tenant_id": tenant_id},
+        )
+
+        return jsonify([
+            {
+                "id": m["id"],
+                "name": m["name"],
+                "email": m["email"],
+                "phone": m.get("phone"),
+                "role": m["role"],
+                "isActive": bool(m.get("is_active", True)),
+                "joinedAt": m["joined_at"].isoformat() if m.get("joined_at") else None,
+            }
+            for m in members
+        ])
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+# ------------------------------------------------------------
+# Super-Admin: CRUD de Systems (tipos de sistema)
+# ------------------------------------------------------------
+@app.get("/api/super-admin/systems")
+@token_required
+def list_all_systems():
+    """Lista todos os sistemas (ativos e inativos) para o super admin."""
+    try:
+        rows = fetch_all(
+            """
+            SELECT id, slug, display_name, description, icon, color, base_route, is_active, display_order
+            FROM systems
+            ORDER BY display_order ASC, id ASC
+            """
+        )
+        return jsonify([
+            {
+                **_system_row_to_dto(r),
+                "displayOrder": r.get("display_order", 0),
+            }
+            for r in rows
+        ])
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@app.post("/api/super-admin/systems")
+@token_required
+def create_system():
+    """Cria um novo tipo de sistema."""
+    try:
+        data = request.get_json(silent=True) or {}
+        required = ["slug", "displayName"]
+        for f in required:
+            if not data.get(f):
+                return jsonify({"error": f"Campo '{f}' obrigatorio"}), 400
+
+        existing = fetch_one("SELECT id FROM systems WHERE slug = :slug", {"slug": data["slug"]})
+        if existing:
+            return jsonify({"error": f"Slug '{data['slug']}' ja existe"}), 409
+
+        execute_sql(
+            """
+            INSERT INTO systems (slug, display_name, description, icon, color, base_route, is_active, display_order)
+            VALUES (:slug, :display_name, :description, :icon, :color, :base_route, :is_active, :display_order)
+            """,
+            {
+                "slug": data["slug"],
+                "display_name": data["displayName"],
+                "description": data.get("description", ""),
+                "icon": data.get("icon", "trophy"),
+                "color": data.get("color", "#ef4444"),
+                "base_route": data.get("baseRoute", f"/{data['slug']}"),
+                "is_active": data.get("isActive", True),
+                "display_order": data.get("displayOrder", 0),
+            },
+        )
+        return jsonify({"message": f"Sistema '{data['displayName']}' criado"})
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@app.patch("/api/super-admin/systems/<int:system_id>")
+@token_required
+def update_system(system_id: int):
+    """Edita campos de um sistema."""
+    try:
+        sys_row = fetch_one("SELECT id FROM systems WHERE id = :id", {"id": system_id})
+        if not sys_row:
+            return jsonify({"error": "Sistema nao encontrado"}), 404
+
+        data = request.get_json(silent=True) or {}
+        field_map = {
+            "displayName": "display_name",
+            "description": "description",
+            "icon": "icon",
+            "color": "color",
+            "baseRoute": "base_route",
+            "isActive": "is_active",
+            "displayOrder": "display_order",
+        }
+
+        sets = []
+        params: dict = {"id": system_id}
+        for camel, db_field in field_map.items():
+            if camel in data:
+                sets.append(f"{db_field} = :{db_field}")
+                params[db_field] = data[camel]
+
+        if not sets:
+            return jsonify({"error": "Nenhum campo para atualizar"}), 400
+
+        execute_sql(
+            f"UPDATE systems SET {', '.join(sets)} WHERE id = :id",
+            params,
+        )
+        return jsonify({"message": "Sistema atualizado"})
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@app.delete("/api/super-admin/systems/<int:system_id>")
+@token_required
+def delete_system(system_id: int):
+    """Desativa um sistema (soft delete). Nao apaga tenants existentes."""
+    try:
+        sys_row = fetch_one("SELECT id, display_name FROM systems WHERE id = :id", {"id": system_id})
+        if not sys_row:
+            return jsonify({"error": "Sistema nao encontrado"}), 404
+
+        tenant_count = fetch_one(
+            "SELECT COUNT(*) as cnt FROM tenants WHERE system_id = :id AND is_active = 1",
+            {"id": system_id},
+        )
+        if tenant_count and int(tenant_count["cnt"]) > 0:
+            return jsonify({"error": f"Sistema tem {tenant_count['cnt']} tenant(s) ativo(s). Desative-os primeiro."}), 409
+
+        execute_sql("UPDATE systems SET is_active = 0 WHERE id = :id", {"id": system_id})
+        return jsonify({"message": f"Sistema '{sys_row['display_name']}' desativado"})
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
 # ------------------------------------------------------------
 # Registrar Blueprints de Autenticação Centralizada
 # ------------------------------------------------------------
