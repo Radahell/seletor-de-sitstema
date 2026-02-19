@@ -124,7 +124,12 @@ def health():
 @app.get("/downloads/<path:filename>")
 def serve_download(filename: str):
     """Serve arquivos de /downloads (APKs, etc)."""
-    return send_from_directory("/downloads", filename)
+    response = send_from_directory("/downloads", filename)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["CDN-Cache-Control"] = "no-store"
+    response.headers["Cloudflare-CDN-Cache-Control"] = "no-store"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
 
 
 @app.get("/api/systems")
