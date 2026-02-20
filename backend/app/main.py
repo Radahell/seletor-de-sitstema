@@ -44,6 +44,11 @@ if not JWT_SECRET:
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev")
 
+DOWNLOADS_DIR = os.path.abspath(os.path.expanduser(os.getenv("DOWNLOADS_DIR", "/downloads")))
+
+if not os.path.isdir(DOWNLOADS_DIR):
+    print(f"⚠️ DOWNLOADS_DIR não encontrado: {DOWNLOADS_DIR}", flush=True)
+
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=False)
 
 # ------------------------------------------------------------
@@ -124,7 +129,7 @@ def health():
 @app.get("/downloads/<path:filename>")
 def serve_download(filename: str):
     """Serve arquivos de /downloads (APKs, etc)."""
-    response = send_from_directory("/downloads", filename)
+    response = send_from_directory(DOWNLOADS_DIR, filename)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["CDN-Cache-Control"] = "no-store"
     response.headers["Cloudflare-CDN-Cache-Control"] = "no-store"
@@ -135,13 +140,11 @@ def serve_download(filename: str):
 @app.get("/api/downloads")
 def list_downloads():
     """Lista APKs disponíveis no diretório compartilhado /downloads."""
-    downloads_dir = "/downloads"
-
-    if not os.path.isdir(downloads_dir):
+    if not os.path.isdir(DOWNLOADS_DIR):
         return jsonify({"files": []})
 
     files = []
-    for entry in os.scandir(downloads_dir):
+    for entry in os.scandir(DOWNLOADS_DIR):
         if not entry.is_file():
             continue
         if not entry.name.lower().endswith(".apk"):

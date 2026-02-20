@@ -41,11 +41,12 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       PYTHONPATH: /app
       SELETOR_API_PORT: ${SELETOR_API_PORT:-22012}
+      DOWNLOADS_DIR: ${DOWNLOADS_DIR:-/downloads}
     volumes:
       - ./backend/uploads:/uploads
       - ./backend:/app
       - ./frontend/dist:/app/frontend/dist
-      - ./downloads:/downloads
+      - ${DOWNLOADS_HOST_PATH:-${HOME}/seletor-de-sistema/downloads}:${DOWNLOADS_DIR:-/downloads}
     command: >
       gunicorn -w 2 -k gthread --threads 8 --timeout 60 --keep-alive 5
       -b 0.0.0.0:${SELETOR_API_PORT:-22012} "app.main:app"
