@@ -61,6 +61,7 @@ export default function DashboardPage() {
   const [systems, setSystems] = useState<SystemCard[]>([]);
   const [mobileApps, setMobileApps] = useState<MobileAppCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [systemsError, setSystemsError] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
@@ -69,28 +70,34 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     setIsLoading(true);
+    setSystemsError(false);
     try {
-      const [allSystems, myTenantsResp, downloadsResp] = await Promise.all([
-        api.getSystems(),
+      const [systemsResult, myTenantsResp, downloadsResp] = await Promise.all([
+        api.getSystems().catch((e) => { console.error('getSystems error:', e); return null; }),
         api.getMyTenants().catch(() => ({ systems: [] as SystemWithTenants[], total: 0 })),
         api.getDownloads().catch(() => ({ files: [] as DownloadFileInfo[] })),
       ]);
 
-      const countBySystem = new Map<string, number>();
-      myTenantsResp.systems.forEach(s => countBySystem.set(s.slug, s.tenants.length));
+      if (systemsResult === null) {
+        setSystemsError(true);
+      } else {
+        const countBySystem = new Map<string, number>();
+        myTenantsResp.systems.forEach(s => countBySystem.set(s.slug, s.tenants.length));
 
-      setSystems(
-        allSystems
-          .filter(sys => !HIDDEN_SYSTEMS.has(sys.slug))
-          .map(sys => ({
-            ...sys,
-            tenantCount: countBySystem.get(sys.slug) || 0,
-          }))
-      );
+        setSystems(
+          systemsResult
+            .filter(sys => !HIDDEN_SYSTEMS.has(sys.slug))
+            .map(sys => ({
+              ...sys,
+              tenantCount: countBySystem.get(sys.slug) || 0,
+            }))
+        );
+      }
 
       setMobileApps(downloadsResp.files.map(mapDownloadToCard));
     } catch (error) {
       console.error('Error loading data:', error);
+      setSystemsError(true);
     } finally {
       setIsLoading(false);
     }
@@ -200,6 +207,17 @@ export default function DashboardPage() {
 
         {/* System Cards - Large with background images */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          {systemsError && (
+            <div className="col-span-2 text-center py-8">
+              <p className="text-red-400 font-semibold text-sm mb-2">Erro ao carregar sistemas.</p>
+              <button
+                onClick={loadData}
+                className="text-xs text-zinc-400 hover:text-white underline"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
           {systems.map((system) => {
             const bgImage = SYSTEM_BACKGROUNDS[system.slug];
             const description = SYSTEM_DESCRIPTIONS[system.slug] || system.displayName;
