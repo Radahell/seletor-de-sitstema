@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, User, Loader2, RefreshCw, Shield, ChevronRight, Smartphone, Download
@@ -64,12 +64,10 @@ export default function DashboardPage() {
   const [systemsError, setSystemsError] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
     setSystemsError(false);
     try {
       const [systemsResult, myTenantsResp, downloadsResp] = await Promise.all([
@@ -99,9 +97,32 @@ export default function DashboardPage() {
       console.error('Error loading data:', error);
       setSystemsError(true);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+
+    const intervalId = window.setInterval(() => {
+      loadData(true);
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadData(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadData]);
 
   const handleLogout = async () => {
     await logout();
@@ -144,7 +165,7 @@ export default function DashboardPage() {
             )}
 
             <button
-              onClick={loadData}
+              onClick={() => loadData()}
               className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
               title="Atualizar"
             >
@@ -211,7 +232,7 @@ export default function DashboardPage() {
             <div className="col-span-2 text-center py-8">
               <p className="text-red-400 font-semibold text-sm mb-2">Erro ao carregar sistemas.</p>
               <button
-                onClick={loadData}
+                onClick={() => loadData()}
                 className="text-xs text-zinc-400 hover:text-white underline"
               >
                 Tentar novamente

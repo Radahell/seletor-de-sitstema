@@ -86,6 +86,27 @@ docker compose --profile dev up -d --build
 
 ---
 
+
+### APKs no dashboard (pasta de downloads)
+
+Para os cards de APK aparecerem, a API precisa enxergar a pasta do host montada no container.
+
+No `.env`, configure com caminho absoluto, por exemplo:
+
+```env
+DOWNLOADS_HOST_PATH=/home/radael/Vídeos/varzea_prime_controller/seletor-de-sistema/downloads
+DOWNLOADS_DIR=/downloads
+```
+
+> Importante: em `docker compose`, `~` não é uma opção confiável em variáveis de volume.
+> Prefira caminho absoluto `/home/...`.
+
+Depois aplique:
+
+```bash
+docker compose up -d --force-recreate api
+```
+
 ## Rotas da API
 
 - `GET /api/systems`
