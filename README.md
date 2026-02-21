@@ -91,21 +91,25 @@ docker compose --profile dev up -d --build
 
 Para os cards de APK aparecerem, a API precisa enxergar a pasta do host montada no container.
 
-No `.env`, configure com caminho absoluto (ou `${HOME}`), por exemplo:
+No `.env`, configure com caminho absoluto, por exemplo:
 
 ```env
-DOWNLOADS_HOST_PATH=${HOME}/Vídeos/varzea_prime_controller/seletor-de-sistema/downloads
+DOWNLOADS_HOST_PATH=/home/radael/Vídeos/varzea_prime_controller/seletor-de-sistema/downloads
 DOWNLOADS_DIR=/downloads
 ```
 
-> Importante: em `docker compose`, `~` nem sempre é expandido dentro de variáveis.
-> Prefira `${HOME}/...` ou caminho absoluto `/home/...`.
+> Importante: em `docker compose`, `~` não é uma opção confiável em variáveis de volume.
+> Prefira caminho absoluto `/home/...`.
 
 Depois aplique:
 
 ```bash
 docker compose up -d --force-recreate api
 ```
+
+No dashboard, os botões de app são fixos e no clique a API busca o APK mais recente por padrão:
+- `AppVarzeaPrime*.apk`
+- `AppLanceDeOuro*.apk`
 
 ## Rotas da API
 
@@ -119,6 +123,9 @@ docker compose up -d --force-recreate api
   - Body: `{ "slug": "copa-aposentados" }`
   - Header opcional: `X-System-Slug: jogador`
   - Retorna o `tenant.branding` que o frontend salva no `localStorage`.
+
+- `GET /api/downloads/resolve?app=varzea-prime|lance-de-ouro`
+  - Resolve o APK mais recente por padrão de nome e retorna `downloadUrl`.
 
 ---
 
