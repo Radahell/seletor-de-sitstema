@@ -115,7 +115,28 @@ export default function DashboardPage() {
     } finally {
       setDownloadingAppId(null);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+
+    const intervalId = window.setInterval(() => {
+      loadData();
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadData]);
 
   const handleLogout = async () => {
     await logout();
