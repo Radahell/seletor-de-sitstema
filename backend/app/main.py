@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import fnmatch
 import re
 import traceback
 import datetime
 import jwt
 from functools import wraps
+from urllib.parse import quote
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -163,6 +165,59 @@ def list_downloads():
 
     files.sort(key=lambda item: item["updatedAt"], reverse=True)
     return jsonify({"files": files})
+
+
+
+
+def _find_latest_apk(pattern: str) -> Optional[Dict[str, Any]]:
+    if not os.path.isdir(DOWNLOADS_DIR):
+        return None
+
+    matches = []
+    for entry in os.scandir(DOWNLOADS_DIR):
+        if not entry.is_file():
+            continue
+        if not entry.name.lower().endswith(".apk"):
+            continue
+        if not fnmatch.fnmatch(entry.name.lower(), pattern.lower()):
+            continue
+
+        stat = entry.stat()
+        matches.append((entry.name, stat.st_mtime, stat.st_size))
+
+    if not matches:
+        return None
+
+    matches.sort(key=lambda item: item[1], reverse=True)
+    name, mtime, size = matches[0]
+    return {
+        "name": name,
+        "size": size,
+        "updatedAt": datetime.datetime.fromtimestamp(
+            mtime, tz=datetime.timezone.utc
+        ).isoformat(),
+        "downloadUrl": f"/seletor-api/downloads/{quote(name)}",
+    }
+
+
+@app.get("/api/downloads/resolve")
+def resolve_download():
+    app_key = (request.args.get("app") or "").strip().lower()
+
+    patterns = {
+        "varzea-prime": "AppVarzeaPrime*.apk",
+        "lance-de-ouro": "AppLanceDeOuro*.apk",
+    }
+
+    pattern = patterns.get(app_key)
+    if not pattern:
+        return jsonify({"error": "App inválido"}), 400
+
+    match = _find_latest_apk(pattern)
+    if not match:
+        return jsonify({"error": "APK não encontrado para este app"}), 404
+
+    return jsonify({"file": match})
 
 
 @app.get("/api/systems")

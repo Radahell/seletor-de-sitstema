@@ -107,6 +107,10 @@ Depois aplique:
 docker compose up -d --force-recreate api
 ```
 
+No dashboard, os botões de app são fixos e no clique a API busca o APK mais recente por padrão:
+- `AppVarzeaPrime*.apk`
+- `AppLanceDeOuro*.apk`
+
 ## Rotas da API
 
 - `GET /api/systems`
@@ -119,6 +123,9 @@ docker compose up -d --force-recreate api
   - Body: `{ "slug": "copa-aposentados" }`
   - Header opcional: `X-System-Slug: jogador`
   - Retorna o `tenant.branding` que o frontend salva no `localStorage`.
+
+- `GET /api/downloads/resolve?app=varzea-prime|lance-de-ouro`
+  - Resolve o APK mais recente por padrão de nome e retorna `downloadUrl`.
 
 ---
 

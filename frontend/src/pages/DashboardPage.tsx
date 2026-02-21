@@ -4,7 +4,7 @@ import {
   LogOut, User, Loader2, RefreshCw, Shield, ChevronRight, Smartphone, Download
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import api, { DownloadFileInfo, SystemInfo, SystemWithTenants } from '../services/api';
+import api, { AppDownloadKey, SystemInfo, SystemWithTenants } from '../services/api';
 
 const SYSTEM_BACKGROUNDS: Record<string, string> = {
   jogador: '/img/campeonato_bg.png',
@@ -20,35 +20,31 @@ const SYSTEM_DESCRIPTIONS: Record<string, string> = {
 
 const HIDDEN_SYSTEMS = new Set(['arbitro']);
 
-const APK_CARD_THEMES = [
-  { color: '#ef4444', bgImage: '/img/campeonato_bg.png' },
-  { color: '#f59e0b', bgImage: '/img/lances_bg.png' },
-  { color: '#3b82f6', bgImage: '/img/gestao_bg.png' },
-];
-
-interface MobileAppCard {
+const FIXED_MOBILE_APPS: Array<{
   id: string;
+  appKey: AppDownloadKey;
   name: string;
   description: string;
   color: string;
-  apkUrl: string;
   bgImage: string;
-}
-
-const mapDownloadToCard = (file: DownloadFileInfo, index: number): MobileAppCard => {
-  const theme = APK_CARD_THEMES[index % APK_CARD_THEMES.length];
-  const baseName = file.name.replace(/\.apk$/i, '');
-  const prettyName = baseName.replace(/[-_]+/g, ' ').trim();
-
-  return {
-    id: file.name,
-    name: prettyName || file.name,
-    description: `Arquivo ${file.name}`,
-    color: theme.color,
-    apkUrl: `/seletor-api/downloads/${encodeURIComponent(file.name)}`,
-    bgImage: theme.bgImage,
-  };
-};
+}> = [
+  {
+    id: 'varzea-prime',
+    appKey: 'varzea-prime',
+    name: 'App Varzea Prime',
+    description: 'Busca APK por AppVarzeaPrime*',
+    color: '#ef4444',
+    bgImage: '/img/campeonato_bg.png',
+  },
+  {
+    id: 'lance-de-ouro',
+    appKey: 'lance-de-ouro',
+    name: 'App Lance de Ouro',
+    description: 'Busca APK por AppLanceDeOuro*',
+    color: '#f59e0b',
+    bgImage: '/img/lances_bg.png',
+  },
+];
 
 interface SystemCard extends SystemInfo {
   tenantCount: number;
@@ -59,7 +55,8 @@ export default function DashboardPage() {
   const { user, logout, isSuperAdmin } = useAuth();
 
   const [systems, setSystems] = useState<SystemCard[]>([]);
-  const [mobileApps, setMobileApps] = useState<MobileAppCard[]>([]);
+  const [downloadingAppId, setDownloadingAppId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [systemsError, setSystemsError] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -70,10 +67,9 @@ export default function DashboardPage() {
     }
     setSystemsError(false);
     try {
-      const [systemsResult, myTenantsResp, downloadsResp] = await Promise.all([
+      const [systemsResult, myTenantsResp] = await Promise.all([
         api.getSystems().catch((e) => { console.error('getSystems error:', e); return null; }),
         api.getMyTenants().catch(() => ({ systems: [] as SystemWithTenants[], total: 0 })),
-        api.getDownloads().catch(() => ({ files: [] as DownloadFileInfo[] })),
       ]);
 
       if (systemsResult === null) {
@@ -92,7 +88,6 @@ export default function DashboardPage() {
         );
       }
 
-      setMobileApps(downloadsResp.files.map(mapDownloadToCard));
     } catch (error) {
       console.error('Error loading data:', error);
       setSystemsError(true);
@@ -105,24 +100,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
-
-    const intervalId = window.setInterval(() => {
-      loadData(true);
-    }, 15000);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadData(true);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
   }, [loadData]);
+
+  const handleDownload = async (app: { id: string; appKey: AppDownloadKey }) => {
+    setDownloadError(null);
+    setDownloadingAppId(app.id);
+
+    try {
+      const response = await api.resolveAppDownload(app.appKey);
+      window.location.href = response.file.downloadUrl;
+    } catch (error: any) {
+      const message = error?.data?.error || 'APK não encontrado para este app agora.';
+      setDownloadError(message);
+    } finally {
+      setDownloadingAppId(null);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -325,11 +318,11 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {mobileApps.map((app) => (
-              <a
+            {FIXED_MOBILE_APPS.map((app) => (
+              <button
                 key={app.id}
-                href={app.apkUrl}
-                download
+                type="button"
+                onClick={() => handleDownload(app)}
                 className="group relative overflow-hidden rounded-2xl transition-all duration-500 hover:shadow-2xl hover:scale-[1.02] min-h-[150px]"
               >
                 {/* Background Image */}
@@ -373,7 +366,7 @@ export default function DashboardPage() {
                     style={{ backgroundColor: `${app.color}dd` }}
                   >
                     <Download className="w-3.5 h-3.5" />
-                    Baixar APK
+                    {downloadingAppId === app.id ? "Verificando..." : "Baixar APK"}
                   </span>
                 </div>
 
@@ -382,13 +375,12 @@ export default function DashboardPage() {
                   className="absolute bottom-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity"
                   style={{ backgroundColor: app.color }}
                 />
-              </a>
+              </button>
             ))}
           </div>
-
-          {mobileApps.length === 0 && (
-            <p className="text-center text-sm text-zinc-500 font-semibold mt-4">
-              Nenhum APK encontrado em /downloads.
+          {downloadError && (
+            <p className="text-center text-sm text-red-400 font-semibold mt-4">
+              {downloadError}
             </p>
           )}
         </div>

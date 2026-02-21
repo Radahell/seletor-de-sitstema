@@ -155,6 +155,12 @@ class ApiService {
   async getDownloads() {
     return this.request<{ files: DownloadFileInfo[] }>('/api/downloads', { skipAuth: true });
   }
+
+  async resolveAppDownload(app: AppDownloadKey) {
+    return this.request<{ file: ResolvedDownloadFile }>(`/api/downloads/resolve?app=${encodeURIComponent(app)}`, {
+      skipAuth: true,
+    });
+  }
 }
 
 // Error class
@@ -235,6 +241,12 @@ export interface DownloadFileInfo {
   size: number;
   updatedAt: string;
 }
+
+export interface ResolvedDownloadFile extends DownloadFileInfo {
+  downloadUrl: string;
+}
+
+export type AppDownloadKey = "varzea-prime" | "lance-de-ouro";
 
 export interface RegisterData {
   name: string;
