@@ -97,6 +97,20 @@ class ApiService {
     });
   }
 
+  async verifyEmail(token: string) {
+    return this.request<{ message: string }>('/api/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+      skipAuth: true,
+    });
+  }
+
+  async resendVerification() {
+    return this.request<{ message: string }>('/api/auth/resend-verification', {
+      method: 'POST',
+    });
+  }
+
   async switchTenant(tenantId?: number, tenantSlug?: string) {
     return this.request<SwitchTenantResponse>('/api/auth/switch-tenant', {
       method: 'POST',
@@ -132,6 +146,13 @@ class ApiService {
   async getTenantDetails(slug: string) {
     return this.request<{ tenant: TenantDetails }>(`/api/tenants/${slug}`, {
       skipAuth: true,
+    });
+  }
+
+  // Onboarding
+  async completeOnboarding() {
+    return this.request<{ message: string }>('/api/auth/me/onboarding-complete', {
+      method: 'POST',
     });
   }
 
@@ -192,6 +213,8 @@ export interface User {
   isActive: boolean;
   createdAt?: string;
   lastLoginAt?: string;
+  onboardingCompletedAt?: string;
+  emailVerifiedAt?: string;
 }
 
 export interface SystemInfo {

@@ -48,6 +48,13 @@ services:
       TENANT_DB_PORT: ${TENANT_DB_PORT:-3306}
       TENANT_DB_USER: ${TENANT_DB_USER:-root}
       TENANT_DB_PASS: ${TENANT_DB_PASS:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@varzeaprime.com.br}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Varzea Prime}
+      APP_BASE_URL: ${APP_BASE_URL:-https://varzeaprime.com.br}
     volumes:
       - ./backend/uploads:/uploads
       - ./backend:/app

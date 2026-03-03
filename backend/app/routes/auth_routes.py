@@ -15,6 +15,7 @@ import datetime
 import hashlib
 import os
 import re
+import secrets
 import traceback
 from functools import wraps
 from typing import Any, Dict, Optional
@@ -24,6 +25,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import execute_sql, fetch_all, fetch_one, safe_db_error
+from app.email_service import is_smtp_configured, send_verification_email
 
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
@@ -157,6 +159,8 @@ def _user_to_dto(row: Dict[str, Any]) -> Dict[str, Any]:
         "isActive": bool(row.get("is_active", True)),
         "createdAt": row.get("created_at").isoformat() if row.get("created_at") else None,
         "lastLoginAt": row.get("last_login_at").isoformat() if row.get("last_login_at") else None,
+        "onboardingCompletedAt": row.get("onboarding_completed_at").isoformat() if row.get("onboarding_completed_at") else None,
+        "emailVerifiedAt": row.get("email_verified_at").isoformat() if row.get("email_verified_at") else None,
     }
 
 
@@ -260,27 +264,29 @@ def register():
             return jsonify({"error": "Nome é obrigatório"}), 400
         if not email:
             return jsonify({"error": "Email é obrigatório"}), 400
-        if not cpf:
-            return jsonify({"error": "CPF é obrigatório"}), 400
         if not password:
             return jsonify({"error": "Senha é obrigatória"}), 400
         if len(password) < 6:
             return jsonify({"error": "Senha deve ter no mínimo 6 caracteres"}), 400
 
-        # Limpar CPF (apenas dígitos para comparação)
-        cpf_digits = "".join(c for c in cpf if c.isdigit())
-        if len(cpf_digits) != 11:
-            return jsonify({"error": "CPF deve conter 11 dígitos"}), 400
+        # CPF é opcional no registro (pode ser preenchido depois no perfil)
+        if cpf:
+            cpf_digits = "".join(c for c in cpf if c.isdigit())
+            if len(cpf_digits) != 11:
+                return jsonify({"error": "CPF deve conter 11 dígitos"}), 400
+        else:
+            cpf = None
 
         # Verificar email único
         existing = fetch_one("SELECT id FROM users WHERE email = :email", {"email": email})
         if existing:
             return jsonify({"error": "Este email já está cadastrado"}), 409
 
-        # Verificar CPF único
-        existing_cpf = fetch_one("SELECT id FROM users WHERE cpf = :cpf", {"cpf": cpf})
-        if existing_cpf:
-            return jsonify({"error": "Este CPF já está cadastrado"}), 409
+        # Verificar CPF único (apenas se CPF foi informado)
+        if cpf:
+            existing_cpf = fetch_one("SELECT id FROM users WHERE cpf = :cpf", {"cpf": cpf})
+            if existing_cpf:
+                return jsonify({"error": "Este CPF já está cadastrado"}), 409
 
         # Criar usuário
         password_hash = generate_password_hash(password)
@@ -318,6 +324,20 @@ def register():
 
         # Buscar usuário criado
         user = fetch_one("SELECT * FROM users WHERE email = :email", {"email": email})
+
+        # Gerar token de verificação de email e enviar
+        verification_token = secrets.token_urlsafe(32)
+        execute_sql(
+            """UPDATE users
+               SET email_verification_token = :token, email_verification_sent_at = NOW()
+               WHERE id = :id""",
+            {"token": verification_token, "id": user["id"]},
+        )
+        if is_smtp_configured():
+            try:
+                send_verification_email(email, name, verification_token)
+            except Exception:
+                pass  # Não falha o registro se o email não for enviado
 
         # Salvar interesses (lead capture)
         if interests:
@@ -792,6 +812,98 @@ def update_my_interests():
                 pass  # ignora system_id inválido
 
         return jsonify({"message": "Interesses atualizados com sucesso"})
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@auth_bp.post("/me/onboarding-complete")
+@login_required
+def complete_onboarding():
+    """Marca onboarding como concluído para o usuário logado."""
+    try:
+        execute_sql(
+            "UPDATE users SET onboarding_completed_at = NOW() WHERE id = :id",
+            {"id": g.current_user_id},
+        )
+        return jsonify({"message": "Onboarding concluído"})
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@auth_bp.post("/verify-email")
+def verify_email():
+    """Verificar email usando token (endpoint público)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        token = (data.get("token") or "").strip()
+        if not token:
+            return jsonify({"error": "Token de verificação ausente"}), 400
+
+        user = fetch_one(
+            "SELECT id, email_verified_at, email_verification_sent_at FROM users WHERE email_verification_token = :token",
+            {"token": token},
+        )
+        if not user:
+            return jsonify({"error": "Token inválido ou expirado"}), 400
+
+        # Verificar expiração (24h)
+        if user.get("email_verification_sent_at"):
+            sent_at = user["email_verification_sent_at"]
+            if (datetime.datetime.utcnow() - sent_at).total_seconds() > 86400:
+                return jsonify({"error": "Token expirado. Solicite um novo."}), 400
+
+        # Já verificado?
+        if user.get("email_verified_at"):
+            return jsonify({"message": "Email já verificado"}), 200
+
+        execute_sql(
+            """UPDATE users
+               SET email_verified_at = NOW(), email_verification_token = NULL
+               WHERE id = :id""",
+            {"id": user["id"]},
+        )
+        return jsonify({"message": "Email verificado com sucesso!"})
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
+
+
+@auth_bp.post("/resend-verification")
+@login_required
+def resend_verification():
+    """Reenviar email de verificação (autenticado)."""
+    try:
+        user = g.current_user
+        if user.get("email_verified_at"):
+            return jsonify({"message": "Email já verificado"}), 200
+
+        # Rate limit: 1 a cada 2 minutos
+        last_sent = user.get("email_verification_sent_at")
+        if last_sent and (datetime.datetime.utcnow() - last_sent).total_seconds() < 120:
+            return jsonify({"error": "Aguarde 2 minutos para reenviar"}), 429
+
+        token = secrets.token_urlsafe(32)
+        execute_sql(
+            """UPDATE users
+               SET email_verification_token = :token, email_verification_sent_at = NOW()
+               WHERE id = :id""",
+            {"token": token, "id": user["id"]},
+        )
+
+        if not is_smtp_configured():
+            return jsonify({"error": "Serviço de email não configurado"}), 503
+
+        success = send_verification_email(user["email"], user["name"], token)
+        if success:
+            return jsonify({"message": "Email de verificação reenviado"})
+        return jsonify({"error": "Erro ao enviar email"}), 500
+
     except Exception as e:
         if ENV == "dev":
             traceback.print_exc()
