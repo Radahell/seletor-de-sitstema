@@ -68,6 +68,9 @@ export default function AdminUsersPage() {
   const [actionId, setActionId] = useState<number | null>(null);
   const [listError, setListError] = useState('');
 
+  // ── Confirm modal ──
+  const [confirmAction, setConfirmAction] = useState<{ user: SystemUser; action: 'delete' | 'suspend' } | null>(null);
+
   const inputClass =
     'w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:border-yellow-500 focus:outline-none';
 
@@ -194,14 +197,28 @@ export default function AdminUsersPage() {
 
   // ── Delete ──
   const handleDelete = async (user: SystemUser) => {
-    if (!confirm(`Excluir usuario "${user.name}"? Esta acao nao pode ser desfeita.`)) return;
+    setConfirmAction({ user, action: 'delete' });
+  };
+
+  const executeConfirmedAction = async () => {
+    if (!confirmAction) return;
+    const { user, action } = confirmAction;
+    setConfirmAction(null);
     setActionId(user.id);
     setListError('');
     try {
-      await deleteSystemUser(user.id);
+      if (action === 'delete') {
+        await deleteSystemUser(user.id);
+      } else if (action === 'suspend') {
+        if (user.is_active) {
+          await suspendSystemUser(user.id);
+        } else {
+          await activateSystemUser(user.id);
+        }
+      }
       loadList();
     } catch (err: unknown) {
-      setListError(err instanceof Error ? err.message : 'Erro ao excluir usuario.');
+      setListError(err instanceof Error ? err.message : `Erro ao ${action === 'delete' ? 'excluir' : 'alterar status do'} usuario.`);
     } finally {
       setActionId(null);
     }
@@ -409,15 +426,21 @@ export default function AdminUsersPage() {
                           : '—'}
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <button
-                            className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors text-xs"
+                            className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors text-xs"
                             onClick={() => startEdit(user)}
                           >
                             Editar
                           </button>
                           <button
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors text-xs"
+                            onClick={() => handleShowAudit(user.id)}
+                          >
+                            {auditUserId === user.id ? 'Fechar Log' : 'Log'}
+                          </button>
+                          <button
+                            className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors text-xs"
                             onClick={() => {
                               if (resetPwdId === user.id) {
                                 setResetPwdId(null);
@@ -428,27 +451,25 @@ export default function AdminUsersPage() {
                               }
                             }}
                           >
-                            {resetPwdId === user.id ? 'Fechar' : 'Reset Senha'}
+                            {resetPwdId === user.id ? 'Fechar' : 'Senha'}
                           </button>
                           <button
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                              user.is_active
+                                ? 'bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20'
+                                : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
+                            }`}
                             disabled={actionId === user.id}
-                            onClick={() => handleToggleStatus(user)}
+                            onClick={() => setConfirmAction({ user, action: 'suspend' })}
                           >
                             {user.is_active ? 'Suspender' : 'Ativar'}
                           </button>
                           <button
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors text-xs"
                             disabled={actionId === user.id}
                             onClick={() => handleDelete(user)}
                           >
                             Excluir
-                          </button>
-                          <button
-                            className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors text-xs"
-                            onClick={() => handleShowAudit(user.id)}
-                          >
-                            {auditUserId === user.id ? 'Fechar Acoes' : 'Ver Acoes'}
                           </button>
                         </div>
 
@@ -543,6 +564,44 @@ export default function AdminUsersPage() {
           </>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setConfirmAction(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+              <span className="text-red-400 text-xl font-bold">!</span>
+            </div>
+            <h3 className="text-lg font-bold text-white text-center mb-2">
+              {confirmAction.action === 'delete' ? 'Excluir usuario' : (confirmAction.user.is_active ? 'Suspender usuario' : 'Reativar usuario')}
+            </h3>
+            <p className="text-sm text-zinc-400 text-center mb-6">
+              {confirmAction.action === 'delete'
+                ? `Tem certeza que deseja excluir "${confirmAction.user.name}"? Esta acao nao pode ser desfeita.`
+                : `Deseja ${confirmAction.user.is_active ? 'suspender' : 'reativar'} "${confirmAction.user.name}"?`
+              }
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="flex-1 px-4 py-2 border border-zinc-700 text-zinc-400 rounded-lg hover:bg-zinc-800 text-sm font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeConfirmedAction}
+                className={`flex-1 px-4 py-2 font-bold rounded-lg text-sm ${
+                  confirmAction.action === 'delete'
+                    ? 'bg-red-500 text-white hover:bg-red-400'
+                    : 'bg-yellow-500 text-zinc-900 hover:bg-yellow-400'
+                }`}
+              >
+                {confirmAction.action === 'delete' ? 'Excluir' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

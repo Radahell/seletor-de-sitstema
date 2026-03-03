@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ScrollText, Monitor, Search } from 'lucide-react';
 import { fetchAuditLogs, fetchActiveSessions, revokeSession } from '../../services/adminApi';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
@@ -87,7 +87,10 @@ export default function AdminAuditPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Auditoria</h1>
+        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <ScrollText className="w-6 h-6 text-purple-400" />
+          Auditoria
+        </h1>
         <p className="text-sm text-zinc-400 mt-1">Acompanhe acessos, rotacao de chaves, mudancas de permissao e tentativas de login.</p>
       </div>
 
@@ -95,7 +98,10 @@ export default function AdminAuditPage() {
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Sessoes ativas</p>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium flex items-center gap-1.5">
+              <Monitor className="w-3.5 h-3.5" />
+              Sessoes ativas
+            </p>
             <h3 className="text-sm font-semibold text-white mt-1">Controle individual</h3>
           </div>
           <button onClick={loadSessions} disabled={sessionsLoading} className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs transition-colors">
@@ -161,7 +167,8 @@ export default function AdminAuditPage() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Email, acao ou IP" className={INPUT_CLS} />
           </div>
           <div className="flex items-end">
-            <button type="submit" className="px-4 py-2 bg-yellow-500 text-zinc-900 font-semibold rounded-lg hover:bg-yellow-400 transition-colors w-full">
+            <button type="submit" className="px-4 py-2 bg-yellow-500 text-zinc-900 font-semibold rounded-lg hover:bg-yellow-400 transition-colors w-full flex items-center justify-center gap-2">
+              <Search className="w-4 h-4" />
               Aplicar filtros
             </button>
           </div>

@@ -91,6 +91,9 @@ export default function AdminTenantsPage() {
   const [requestCounts, setRequestCounts] = useState<Record<number, number>>({});
   const [processingRequest, setProcessingRequest] = useState<number | null>(null);
 
+  // Confirm delete modal
+  const [confirmDeleteTenant, setConfirmDeleteTenant] = useState<{ id: number; name: string } | null>(null);
+
   const [form, setForm] = useState({
     displayName: '',
     slug: '',
@@ -324,9 +327,14 @@ export default function AdminTenantsPage() {
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!window.confirm(`TEM CERTEZA? Isso apagara o banco de dados do sistema "${name}" permanentemente!`)) return;
+  const handleDelete = (id: number, name: string) => {
+    setConfirmDeleteTenant({ id, name });
+  };
 
+  const executeDelete = async () => {
+    if (!confirmDeleteTenant) return;
+    const { id, name } = confirmDeleteTenant;
+    setConfirmDeleteTenant(null);
     try {
       await api.request(`/api/super-admin/tenants/${id}`, { method: 'DELETE' });
       setStatus({ type: 'success', message: `Sistema "${name}" deletado com sucesso.` });
@@ -367,12 +375,9 @@ export default function AdminTenantsPage() {
   return (
     <div className="p-6 space-y-8">
       {/* Header */}
-      <div className="text-center">
-        <div className="inline-flex items-center gap-2 text-yellow-500 mb-2">
-          <Server className="w-6 h-6" />
-          <h1 className="text-2xl font-bold">Fabrica de Sistemas</h1>
-        </div>
-        <p className="text-sm text-zinc-400">Crie e gerencie instancias de sistemas.</p>
+      <div>
+        <h1 className="text-2xl font-bold text-white">Sistemas & Tenants</h1>
+        <p className="text-sm text-zinc-400 mt-1">Gerencie tipos de sistema e suas instancias (tenants).</p>
       </div>
 
       {/* ====== SYSTEMS SECTION ====== */}
@@ -841,6 +846,38 @@ export default function AdminTenantsPage() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setConfirmDeleteTenant(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col items-center text-center gap-3 mb-5">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Deletar Tenant</h3>
+              <p className="text-sm text-zinc-400">
+                Tem certeza que deseja deletar <span className="font-semibold text-white">"{confirmDeleteTenant.name}"</span>?
+                Isso apagara o banco de dados permanentemente.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteTenant(null)}
+                className="flex-1 px-4 py-2 border border-zinc-700 text-zinc-400 rounded-lg hover:bg-zinc-800 text-sm font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeDelete}
+                className="flex-1 px-4 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-400 text-sm"
+              >
+                Sim, deletar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {editingTenant && (

@@ -2,7 +2,107 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Pequenos defaults */
+/* Defaults */
 html, body {
   height: 100%;
+}
+
+/* Design System - Varzea Prime */
+@layer components {
+  /* Glass card - fundo semi-transparente com blur */
+  .glass-card {
+    @apply bg-white/[0.03] border border-white/[0.07] rounded-3xl backdrop-blur-lg;
+  }
+
+  /* Gradiente base do tema */
+  .vp-gradient {
+    background: linear-gradient(160deg, #020617 0%, #0a0f1e 50%, #020617 100%);
+  }
+
+  /* Labels padronizados */
+  .section-label {
+    @apply text-[10px] font-extrabold uppercase tracking-[0.2em] text-zinc-500;
+  }
+
+  /* Botão primário (gold) */
+  .btn-primary {
+    @apply px-6 py-3 rounded-2xl font-black text-sm tracking-wider uppercase
+           bg-gradient-to-r from-amber-500 to-amber-600
+           text-black shadow-lg shadow-amber-500/25
+           hover:shadow-xl hover:shadow-amber-500/30
+           transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Botão ghost */
+  .btn-ghost {
+    @apply px-4 py-2 rounded-xl font-bold text-xs tracking-wider uppercase
+           bg-white/[0.03] border border-white/[0.07] text-zinc-400
+           hover:bg-white/[0.06] hover:text-zinc-200
+           transition-all duration-200;
+  }
+
+  /* Card de produto/sistema */
+  .product-card {
+    @apply relative overflow-hidden rounded-3xl border border-white/[0.07]
+           bg-white/[0.02] backdrop-blur-sm
+           transition-all duration-300
+           hover:border-white/[0.12] hover:shadow-2xl hover:-translate-y-1;
+  }
+
+  /* Glow effect nos cards */
+  .glow-amber {
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.15);
+  }
+  .glow-red {
+    box-shadow: 0 0 40px rgba(239, 68, 68, 0.15);
+  }
+  .glow-blue {
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.15);
+  }
+
+  /* Badge/chip */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+           text-[10px] font-bold uppercase tracking-wider;
+  }
+
+  /* Wizard step indicator */
+  .wizard-step {
+    @apply w-2.5 h-2.5 rounded-full transition-all duration-300;
+  }
+  .wizard-step-active {
+    @apply w-8 bg-amber-500;
+  }
+  .wizard-step-done {
+    @apply bg-amber-500/50;
+  }
+  .wizard-step-pending {
+    @apply bg-zinc-700;
+  }
+}
+
+/* Animações customizadas */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.4); }
+}
+
+/* Scrollbar customizada */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }

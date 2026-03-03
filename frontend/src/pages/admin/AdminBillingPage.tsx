@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react';
+import { Receipt, Tag, Star } from 'lucide-react';
 import {
   fetchInvoices,
   createInvoice,
@@ -91,18 +92,21 @@ export default function AdminBillingPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Financeiro</h1>
-        <p className="text-sm text-zinc-400">Faturas, cupons e programa de fidelidade.</p>
+        <p className="text-sm text-zinc-400 mt-1">Faturas, cupons e programa de fidelidade.</p>
       </div>
 
       {/* Tab bar */}
       <div className="flex gap-2">
         <button className={tabBtnClass('invoices')} onClick={() => setTab('invoices')}>
+          <Receipt className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
           Faturas
         </button>
         <button className={tabBtnClass('coupons')} onClick={() => setTab('coupons')}>
+          <Tag className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
           Cupons
         </button>
         <button className={tabBtnClass('loyalty')} onClick={() => setTab('loyalty')}>
+          <Star className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
           Fidelidade
         </button>
       </div>

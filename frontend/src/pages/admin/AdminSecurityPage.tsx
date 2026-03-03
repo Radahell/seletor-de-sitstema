@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Shield, Wifi, Key, Smartphone, ScrollText } from 'lucide-react';
 import {
   fetchSecurityStatus,
   fetchAuditLogs,
@@ -80,12 +80,22 @@ export default function AdminSecurityPage() {
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Sessoes ativas</p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <Shield className="w-3.5 h-3.5 text-green-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Sessoes ativas</p>
+          </div>
           <p className="text-3xl font-bold text-white mt-2">{secStatus?.sessions?.active ?? '—'}</p>
           <p className="text-xs text-zinc-500 mt-1">sessoes no sistema</p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Cobertura IP</p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <Wifi className="w-3.5 h-3.5 text-blue-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Cobertura IP</p>
+          </div>
           <p className="text-3xl font-bold text-white mt-2">
             {secStatus?.network?.coverage != null ? `${Math.round(secStatus.network.coverage * 100)}%` : '—'}
           </p>
@@ -96,7 +106,12 @@ export default function AdminSecurityPage() {
           </p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">API Keys</p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Key className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">API Keys</p>
+          </div>
           <p className="text-lg font-bold text-white mt-2">
             {secStatus?.api_keys?.last_rotation
               ? `Rotacao: ${new Date(secStatus.api_keys.last_rotation).toLocaleDateString('pt-BR')}`
@@ -111,7 +126,10 @@ export default function AdminSecurityPage() {
 
       {/* Active Sessions */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-white mb-4">Sessoes ativas</h2>
+        <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <Smartphone className="w-4 h-4 text-green-400" />
+          Sessoes ativas
+        </h2>
         {sessions.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhuma sessao ativa.</p>
         ) : (
@@ -147,7 +165,10 @@ export default function AdminSecurityPage() {
       {/* Audit Logs */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-white">Logs de auditoria</h2>
+          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+            <ScrollText className="w-4 h-4 text-purple-400" />
+            Logs de auditoria
+          </h2>
           <select
             value={logsFilter.category}
             onChange={(e) => setLogsFilter({ category: e.target.value, page: 1 })}

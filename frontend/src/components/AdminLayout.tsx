@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { to: '/admin/billing', label: 'Faturamento', icon: Receipt },
   { to: '/admin/security', label: 'Seguranca', icon: Shield },
   { to: '/admin/audit', label: 'Auditoria', icon: ScrollText },
-  { to: '/admin/tenants', label: 'Fab. Sistemas', icon: Server },
+  { to: '/admin/tenants', label: 'Sistemas & Tenants', icon: Server },
 ];
 
 export default function AdminLayout() {

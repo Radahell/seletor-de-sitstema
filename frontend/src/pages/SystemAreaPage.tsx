@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Building2,
+  Camera,
   ChevronRight,
   Clock,
   Loader2,
@@ -13,6 +14,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import HintTooltip from '../components/HintTooltip';
 import api, { SystemWithTenants, TenantInfo } from '../services/api';
 
 const SYSTEM_ICONS: Record<string, typeof Trophy> = {
@@ -27,6 +29,20 @@ const SYSTEM_BACKGROUNDS: Record<string, string> = {
   quadra: '/img/gestao_bg.png',
 };
 
+const SYSTEM_TAGLINES: Record<string, string> = {
+  jogador: 'Organize torneios, gerencie times e acompanhe resultados em tempo real',
+  quadra: 'Reserve quadras, gerencie horarios e controle seu espaco esportivo',
+  lances: 'Grave seus jogos com cameras profissionais e reviva suas melhores jogadas',
+};
+
+interface GuidedAction {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  color: string;
+  onClick: () => void;
+}
+
 const SYSTEM_LABELS: Record<string, {
   singular: string;
   plural: string;
@@ -37,27 +53,105 @@ const SYSTEM_LABELS: Record<string, {
   jogador: {
     singular: 'campeonato',
     plural: 'campeonatos',
-    searchLabel: 'Buscar campeonato para jogar',
-    createLabel: 'Cadastrar novo campeonato',
-    createDescription: 'Quer criar e gerenciar seu próprio campeonato? Entre em contato com nossa equipe para conhecer os planos e valores.',
+    searchLabel: 'Encontrar campeonato',
+    createLabel: 'Criar meu campeonato',
+    createDescription: 'Quer criar e gerenciar seu proprio campeonato? Entre em contato com nossa equipe para conhecer os planos e valores.',
   },
   quadra: {
     singular: 'quadra',
     plural: 'quadras',
-    searchLabel: 'Buscar quadra',
-    createLabel: 'Cadastrar minha quadra',
-    createDescription: 'Quer gerenciar sua quadra esportiva com o Varzea Prime? Entre em contato para conhecer o sistema de gestão de quadras.',
+    searchLabel: 'Reservar uma quadra',
+    createLabel: 'Cadastrar meu estabelecimento',
+    createDescription: 'Quer gerenciar sua quadra esportiva com o Varzea Prime? Entre em contato para conhecer o sistema de gestao de quadras.',
   },
   lances: {
     singular: 'câmera',
     plural: 'câmeras',
-    searchLabel: 'Buscar câmera',
-    createLabel: 'Contratar sistema de câmeras',
-    createDescription: 'Quer ter câmeras profissionais gravando seus jogos? Fale com nossa equipe para saber mais.',
+    searchLabel: 'Ver gravacoes',
+    createLabel: 'Contratar cameras',
+    createDescription: 'Quer ter cameras profissionais gravando seus jogos? Fale com nossa equipe para saber mais.',
   },
 };
 
 const WHATSAPP_NUMBER = '5567992247898';
+
+function getGuidedActions(
+  systemSlug: string,
+  color: string,
+  onDiscover: () => void,
+  onContact: () => void,
+): GuidedAction[] {
+  switch (systemSlug) {
+    case 'jogador':
+      return [
+        {
+          icon: <Search className="w-4 h-4" style={{ color }} />,
+          label: 'Encontrar campeonato',
+          description: 'Veja torneios disponiveis e participe como jogador',
+          color,
+          onClick: onDiscover,
+        },
+        {
+          icon: <Plus className="w-4 h-4 text-amber-400" />,
+          label: 'Criar meu campeonato',
+          description: 'Organize seu proprio torneio e gerencie times',
+          color: '#f59e0b',
+          onClick: onContact,
+        },
+      ];
+    case 'quadra':
+      return [
+        {
+          icon: <Search className="w-4 h-4" style={{ color }} />,
+          label: 'Reservar uma quadra',
+          description: 'Encontre horarios disponiveis e reserve online',
+          color,
+          onClick: onDiscover,
+        },
+        {
+          icon: <Building2 className="w-4 h-4 text-amber-400" />,
+          label: 'Cadastrar meu estabelecimento',
+          description: 'Gerencie reservas, vendas e horarios da sua quadra',
+          color: '#f59e0b',
+          onClick: onContact,
+        },
+      ];
+    case 'lances':
+      return [
+        {
+          icon: <Video className="w-4 h-4" style={{ color }} />,
+          label: 'Ver gravacoes',
+          description: 'Assista aos videos dos seus jogos e melhores lances',
+          color,
+          onClick: onDiscover,
+        },
+        {
+          icon: <Camera className="w-4 h-4 text-amber-400" />,
+          label: 'Contratar cameras',
+          description: 'Configure cameras profissionais nas suas quadras',
+          color: '#f59e0b',
+          onClick: onContact,
+        },
+      ];
+    default:
+      return [
+        {
+          icon: <Search className="w-4 h-4" style={{ color }} />,
+          label: 'Explorar',
+          description: 'Veja o que esta disponivel',
+          color,
+          onClick: onDiscover,
+        },
+        {
+          icon: <Plus className="w-4 h-4 text-amber-400" />,
+          label: 'Cadastrar',
+          description: 'Fale com nossa equipe',
+          color: '#f59e0b',
+          onClick: onContact,
+        },
+      ];
+  }
+}
 
 export default function SystemAreaPage() {
   const navigate = useNavigate();
@@ -206,6 +300,11 @@ export default function SystemAreaPage() {
               <h1 className="text-3xl md:text-4xl font-black text-white uppercase italic tracking-tighter leading-none drop-shadow-2xl">
                 {systemInfo?.displayName || slug}
               </h1>
+              {SYSTEM_TAGLINES[slug || ''] && (
+                <p className="text-sm text-zinc-400 mt-2 leading-relaxed max-w-md">
+                  {SYSTEM_TAGLINES[slug || '']}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -281,40 +380,41 @@ export default function SystemAreaPage() {
           </section>
         )}
 
-        {/* ── Action Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-          {/* Search */}
-          <button
-            onClick={() => setShowDiscover(!showDiscover)}
-            className="group p-5 rounded-2xl border border-dashed text-left transition-all duration-300 hover:-translate-y-0.5"
-            style={{
-              background: showDiscover ? `${color}06` : 'rgba(255,255,255,0.02)',
-              borderColor: showDiscover ? `${color}30` : 'rgba(255,255,255,0.08)',
-            }}
-          >
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
-              style={{ background: `${color}15`, border: `1px solid ${color}20` }}
-            >
-              <Search className="w-4 h-4" style={{ color }} />
-            </div>
-            <p className="text-sm font-bold text-white mb-1">{labels.searchLabel}</p>
-            <p className="text-xs text-zinc-600">Encontre e participe como jogador</p>
-          </button>
-
-          {/* Create */}
-          <button
-            onClick={() => setShowContactModal(true)}
-            className="group p-5 rounded-2xl border border-dashed border-amber-800/40 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-amber-600/40"
-            style={{ background: 'rgba(245,158,11,0.03)' }}
-          >
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 bg-amber-500/10 border border-amber-500/20 transition-transform group-hover:scale-110">
-              <Plus className="w-4 h-4 text-amber-400" />
-            </div>
-            <p className="text-sm font-bold text-amber-400 mb-1">{labels.createLabel}</p>
-            <p className="text-xs text-zinc-600">Fale com nossa equipe</p>
-          </button>
-        </div>
+        {/* ── Guided Actions ── */}
+        <section className="mb-8">
+          <p className="section-label mb-4">O que voce quer fazer?</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {getGuidedActions(slug || '', color, () => setShowDiscover(!showDiscover), () => setShowContactModal(true)).map((action, i) => (
+              <button
+                key={i}
+                onClick={action.onClick}
+                className="group p-5 rounded-2xl border border-dashed text-left transition-all duration-300 hover:-translate-y-0.5"
+                style={{
+                  background: `rgba(255,255,255,0.02)`,
+                  borderColor: 'rgba(255,255,255,0.08)',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = `${action.color}40`;
+                  (e.currentTarget as HTMLElement).style.background = `${action.color}06`;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.08)';
+                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.02)';
+                }}
+              >
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
+                  style={{ background: `${action.color}15`, border: `1px solid ${action.color}20` }}
+                >
+                  {action.icon}
+                </div>
+                <p className="text-sm font-bold text-white mb-1">{action.label}</p>
+                <p className="text-xs text-zinc-500">{action.description}</p>
+              </button>
+            ))}
+          </div>
+          <HintTooltip id={`system-${slug}-actions`} text={`Escolha uma acao para explorar os ${labels.plural} disponiveis ou cadastrar o seu.`} />
+        </section>
 
         {/* ── Discover Section ── */}
         {showDiscover && (
@@ -370,11 +470,22 @@ export default function SystemAreaPage() {
           </section>
         )}
 
-        {/* Empty hint */}
+        {/* Empty state */}
         {myTenants.length === 0 && !showDiscover && (
-          <p className="text-center text-zinc-700 text-xs mt-2">
-            Use os botões acima para encontrar {labels.plural} ou cadastrar o seu
-          </p>
+          <div className="text-center py-12 rounded-2xl border border-dashed border-white/5" style={{ background: 'rgba(255,255,255,0.01)' }}>
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: `${color}10`, border: `1px solid ${color}20` }}
+            >
+              <Icon className="w-8 h-8" style={{ color: `${color}60` }} />
+            </div>
+            <h3 className="text-lg font-bold text-zinc-300 mb-2">
+              Comece sua jornada
+            </h3>
+            <p className="text-sm text-zinc-600 max-w-sm mx-auto">
+              Voce ainda nao esta em nenhum {labels.singular}. Use as opcoes acima para explorar ou cadastrar o seu.
+            </p>
+          </div>
         )}
       </div>
 

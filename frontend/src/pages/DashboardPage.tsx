@@ -3,6 +3,7 @@ import {
   Download,
   Loader2,
   LogOut,
+  Mail,
   RefreshCw, Shield,
   Smartphone,
   User
@@ -10,6 +11,8 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import OnboardingWizard from '../components/OnboardingWizard';
+import HintTooltip from '../components/HintTooltip';
 import api, { DownloadFileInfo, SystemInfo, SystemWithTenants } from '../services/api';
 
 const SYSTEM_BACKGROUNDS: Record<string, string> = {
@@ -19,9 +22,9 @@ const SYSTEM_BACKGROUNDS: Record<string, string> = {
 };
 
 const SYSTEM_DESCRIPTIONS: Record<string, string> = {
-  jogador: 'Organize e participe de campeonatos de futebol amador',
-  quadra: 'Gerencie quadras esportivas e reservas',
-  lances: 'Câmeras e gravações dos seus jogos',
+  jogador: 'Organize torneios, gerencie times e acompanhe resultados em tempo real',
+  quadra: 'Reserve quadras, gerencie horarios e controle seu espaco esportivo',
+  lances: 'Grave seus jogos com cameras profissionais e reviva suas melhores jogadas',
 };
 
 const HIDDEN_SYSTEMS = new Set(['arbitro']);
@@ -55,13 +58,15 @@ interface SystemCard extends SystemInfo { tenantCount: number }
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { user, logout, isSuperAdmin } = useAuth();
+  const { user, logout, isSuperAdmin, isOnboardingComplete } = useAuth();
 
   const [systems, setSystems] = useState<SystemCard[]>([]);
   const [mobileApps, setMobileApps] = useState<MobileAppCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [systemsError, setSystemsError] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendMsg, setResendMsg] = useState<string | null>(null);
 
   const loadSystems = useCallback(async () => {
     setIsLoading(true); setSystemsError(false);
@@ -100,6 +105,11 @@ export default function DashboardPage() {
 
   const handleLogout = async () => { await logout(); navigate('/auth'); };
 
+  // Mostrar wizard de onboarding para novos usuários
+  if (!isOnboardingComplete) {
+    return <OnboardingWizard />;
+  }
+
   if (isLoading) {
     return (
       <div style={{ minHeight: '100vh', background: '#020617', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -133,7 +143,7 @@ export default function DashboardPage() {
             <img src="/img/logo_vp.png" alt="Varzea Prime" style={{ width: 38, height: 38, borderRadius: 12 }} />
             <div>
               <h1 style={{ color: '#f8fafc', fontWeight: 900, fontSize: 17, fontStyle: 'italic', letterSpacing: -0.5, margin: 0 }}>Varzea Prime</h1>
-              <p style={{ color: '#1e293b', fontWeight: 800, fontSize: 9, letterSpacing: '0.25em', textTransform: 'uppercase', margin: 0 }}>Plataforma Esportiva</p>
+              <p style={{ color: '#475569', fontWeight: 800, fontSize: 9, letterSpacing: '0.25em', textTransform: 'uppercase', margin: 0 }}>Plataforma Esportiva</p>
             </div>
           </div>
 
@@ -177,6 +187,35 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      {/* Email verification banner */}
+      {user && !user.emailVerifiedAt && (
+        <div style={{ background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <Mail style={{ width: 16, height: 16, color: '#f59e0b', flexShrink: 0 }} />
+          <span style={{ color: '#fbbf24', fontSize: 13, fontWeight: 600 }}>
+            Verifique seu email para garantir acesso completo.
+          </span>
+          {resendMsg ? (
+            <span style={{ color: '#4ade80', fontSize: 12, fontWeight: 600 }}>{resendMsg}</span>
+          ) : (
+            <button
+              onClick={async () => {
+                setResendingEmail(true); setResendMsg(null);
+                try {
+                  const resp = await api.resendVerification();
+                  setResendMsg(resp.message);
+                } catch {
+                  setResendMsg('Falha ao reenviar. Tente novamente mais tarde.');
+                } finally { setResendingEmail(false); }
+              }}
+              disabled={resendingEmail}
+              style={{ padding: '4px 12px', borderRadius: 8, background: '#f59e0b', border: 'none', color: '#000', fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: resendingEmail ? 0.5 : 1 }}
+            >
+              {resendingEmail ? 'Enviando...' : 'Reenviar email'}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Main ── */}
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 20px 80px', position: 'relative', zIndex: 1 }}>
 
@@ -190,9 +229,13 @@ export default function DashboardPage() {
           <h2 style={{ color: '#f8fafc', fontWeight: 900, fontSize: 'clamp(36px, 6vw, 56px)', fontStyle: 'italic', letterSpacing: -2, textTransform: 'uppercase', lineHeight: 1, margin: '0 0 12px' }}>
             Olá, <span style={{ color: '#f59e0b' }}>{firstName}</span>
           </h2>
-          <p style={{ color: '#334155', fontSize: 14, fontWeight: 500, margin: 0 }}>
-            Escolha a área que deseja acessar
+          <p style={{ color: '#64748b', fontSize: 14, fontWeight: 500, margin: 0 }}>
+            Escolha o produto que deseja acessar
           </p>
+
+          <div style={{ marginTop: 16 }}>
+            <HintTooltip id="dashboard-products" text="Clique em um produto para explorar campeonatos, quadras ou gravacoes de jogos." />
+          </div>
         </div>
 
         {/* ── System Cards ── */}
@@ -327,8 +370,8 @@ export default function DashboardPage() {
 
         {/* Footer */}
         <div style={{ textAlign: 'center', marginTop: 64 }}>
-          <p style={{ color: '#0f172a', fontSize: 10, fontWeight: 800, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
-            Sistema Integrado de Gestão Esportiva
+          <p style={{ color: '#334155', fontSize: 10, fontWeight: 800, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+            Varzea Prime — Plataforma Esportiva
           </p>
         </div>
       </main>

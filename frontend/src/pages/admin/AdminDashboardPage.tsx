@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Building2, Loader2, Users, Activity, Video, ShoppingBag } from 'lucide-react';
 import { fetchDashboardMetrics, type DashboardMetrics } from '../../services/adminApi';
 
 export default function AdminDashboardPage() {
@@ -54,7 +54,12 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {/* Estabelecimentos */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3">Estabelecimentos</p>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <Building2 className="w-3.5 h-3.5 text-blue-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Estabelecimentos</p>
+          </div>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold text-white">{metrics?.establishments?.active ?? '—'}</p>
@@ -73,7 +78,12 @@ export default function AdminDashboardPage() {
 
         {/* Jogadores */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3">Jogadores</p>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <Users className="w-3.5 h-3.5 text-green-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Jogadores</p>
+          </div>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold text-white">{metrics?.players?.active ?? '—'}</p>
@@ -102,7 +112,12 @@ export default function AdminDashboardPage() {
 
         {/* Atividade */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3">Atividade &amp; Sessoes</p>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Activity className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Atividade &amp; Sessoes</p>
+          </div>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold text-white">{metrics?.engagement?.logins_last_24h ?? '—'}</p>
@@ -121,7 +136,12 @@ export default function AdminDashboardPage() {
 
         {/* Videos */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3">Videos sincronizados</p>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center">
+              <Video className="w-3.5 h-3.5 text-purple-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Videos sincronizados</p>
+          </div>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold text-white">{metrics?.videos?.last_24h ?? '—'}</p>
@@ -140,7 +160,12 @@ export default function AdminDashboardPage() {
 
         {/* Alugueis */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3">Alugueis (SGQ)</p>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center">
+              <ShoppingBag className="w-3.5 h-3.5 text-red-400" />
+            </div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Alugueis (SGQ)</p>
+          </div>
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold text-white">{metrics?.player_rentals?.total_rentals ?? '—'}</p>

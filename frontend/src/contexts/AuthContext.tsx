@@ -8,12 +8,14 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isOnboardingComplete: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   switchTenant: (tenantId: number) => Promise<void>;
   updateTenants: (tenants: TenantInfo[]) => void;
+  completeOnboarding: () => Promise<void>;
 }
 
 
@@ -39,6 +41,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!user;
+  const isOnboardingComplete = !!user?.onboardingCompletedAt;
 
   // Load user on mount
   useEffect(() => {
@@ -116,6 +119,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setTenants(newTenants);
   }, []);
 
+  const completeOnboarding = useCallback(async () => {
+    await api.completeOnboarding();
+    // Atualizar user local com onboarding completo
+    setUser(prev => prev ? { ...prev, onboardingCompletedAt: new Date().toISOString() } : null);
+  }, []);
+
   const value: AuthContextType = {
     user,
     tenants,
@@ -123,12 +132,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isSuperAdmin,
     isLoading,
     isAuthenticated,
+    isOnboardingComplete,
     login,
     register,
     logout,
     refreshUser,
     switchTenant,
     updateTenants,
+    completeOnboarding,
   };
 
   return (
