@@ -9,8 +9,6 @@
 #   ./migrate.sh --dry-run  → mostra o que seria aplicado
 # ============================================================
 
-set -e
-
 MIGRATIONS_DIR="$(dirname "$0")/migrations"
 DB_CONTAINER="seletor-sistema-db"
 DB_NAME="seletor_db"
@@ -43,6 +41,40 @@ docker exec "$DB_CONTAINER" bash -c \
     );
   \"" 2>/dev/null
 
+# Registra automaticamente migrations que já estão no banco
+# (detecta pela existência de colunas/tabelas chave de cada migration)
+_auto_register() {
+  local migration="$1"
+  local check_sql="$2"
+  local exists
+  exists=$(docker exec "$DB_CONTAINER" bash -c \
+    "mysql -u$DB_USER '-p$DB_PASS' $DB_NAME -N -e \"$check_sql\"" 2>/dev/null | tr -d '[:space:]')
+  if [[ "$exists" == "1" ]]; then
+    docker exec "$DB_CONTAINER" bash -c \
+      "mysql -u$DB_USER '-p$DB_PASS' $DB_NAME -e \"
+        INSERT IGNORE INTO schema_migrations (migration) VALUES ('$migration');
+      \"" 2>/dev/null
+  fi
+}
+
+# Auto-registra migrations antigas já aplicadas (idempotente)
+_auto_register "001_centralized_users.sql" \
+  "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='users';"
+_auto_register "002_add_cpf_to_users.sql" \
+  "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='users' AND COLUMN_NAME='cpf';"
+_auto_register "003_add_address_timezone_to_users.sql" \
+  "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='users' AND COLUMN_NAME='timezone';"
+_auto_register "004_centralize_user_profile.sql" \
+  "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='users' AND COLUMN_NAME='bio';"
+_auto_register "005_seed_users_from_dump.sql" \
+  "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='users';"
+_auto_register "006_seed_lances_tenant.sql" \
+  "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='systems';"
+_auto_register "007_add_client_role.sql" \
+  "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='user_tenants' AND COLUMN_NAME='role';"
+_auto_register "008_cpf_unique_constraint.sql" \
+  "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_NAME='users' AND INDEX_NAME='cpf';"
+
 echo "=========================================="
 echo "  MIGRATIONS — $DB_NAME"
 [[ "$DRY_RUN" == true ]] && echo "  (DRY RUN — nada será aplicado)"
@@ -50,6 +82,7 @@ echo "=========================================="
 
 APPLIED=0
 SKIPPED=0
+FAILED=0
 
 # Processa arquivos em ordem numérica
 for FILE in $(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | sort); do
@@ -80,9 +113,15 @@ for FILE in $(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | sort); do
     continue
   fi
 
-  # Aplica a migration
-  docker exec -i "$DB_CONTAINER" bash -c \
-    "mysql -u$DB_USER '-p$DB_PASS' $DB_NAME" < "$FILE" 2>/dev/null
+  # Aplica a migration (captura erro sem parar o script)
+  ERR=$(docker exec -i "$DB_CONTAINER" bash -c \
+    "mysql -u$DB_USER '-p$DB_PASS' $DB_NAME" < "$FILE" 2>&1)
+
+  if [[ $? -ne 0 ]]; then
+    echo "  [ERRO] $FILENAME: $ERR"
+    FAILED=$((FAILED + 1))
+    continue
+  fi
 
   # Registra como aplicada
   docker exec "$DB_CONTAINER" bash -c \
@@ -96,5 +135,5 @@ done
 
 echo ""
 echo "=========================================="
-echo "  $APPLIED aplicada(s), $SKIPPED já existiam"
+echo "  $APPLIED aplicada(s) | $SKIPPED já existiam | $FAILED erro(s)"
 echo "=========================================="
