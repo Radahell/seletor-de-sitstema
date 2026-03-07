@@ -5,6 +5,7 @@ services:
   db:
     image: mysql:8.4
     environment:
+      TZ: America/Campo_Grande
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
     volumes:
@@ -35,6 +36,7 @@ services:
     env_file:
       - .env
     environment:
+      TZ: America/Campo_Grande
       MASTER_DB_URL: ${DATABASE_URL}
       FLASK_APP: app.main:app
       FLASK_ENV: ${FLASK_ENV}
@@ -83,6 +85,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: seletor-sistema-web
+    environment:
+      TZ: America/Campo_Grande
     expose:
       - "${SELETOR_WEB_PORT:-22011}"
     ports:
