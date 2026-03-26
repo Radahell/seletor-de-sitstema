@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SwitchSystemMenu from '../components/SwitchSystemMenu';
+import DvrTimeline from '../components/DvrTimeline';
 import { useAuth } from '../contexts/AuthContext';
 
 const SCL_API = import.meta.env.VITE_SCL_API_URL || '/scl-api';
@@ -60,7 +61,7 @@ interface SessionInfo {
   uptime_seconds: number;
 }
 
-type TabType = 'live' | 'clips' | 'recordings';
+type TabType = 'live' | 'clips' | 'recordings' | 'editor';
 
 const PAGE_SIZE = 12;
 
@@ -822,6 +823,7 @@ export default function LancesPage() {
     { key: 'clips', label: 'Meus Lances', icon: Film, count: clips.length || undefined },
     { key: 'recordings', label: 'Gravações', icon: Video, count: recordings.length || undefined },
     { key: 'live', label: 'Ao Vivo', icon: Wifi, count: sessions.length || undefined },
+    { key: 'editor', label: 'Editor', icon: Film },
   ];
 
   return (
@@ -1006,6 +1008,23 @@ export default function LancesPage() {
                       </button>
                     </div>
                   )}
+                </div>
+              )
+            )}
+
+            {activeTab === 'editor' && (
+              sessions.length === 0 ? (
+                <EmptyState icon={Film} title="Nenhuma sessão ativa" description="Inicie uma sessão de gravação para usar o editor de lances" />
+              ) : (
+                <div className="space-y-4">
+                  {sessions.map(session => (
+                    <div key={session.id}>
+                      <h3 className="text-sm font-bold text-zinc-400 mb-2">
+                        {(session as any).field_name || 'Sessão'} — {session.id.slice(0, 8)}
+                      </h3>
+                      {token && <DvrTimeline sessionId={session.id} token={token} />}
+                    </div>
+                  ))}
                 </div>
               )
             )}
