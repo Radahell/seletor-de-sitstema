@@ -275,9 +275,9 @@ function ClipCard({
             <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${getStatusColor(clip.status)}`}>
               {getStatusLabel(clip.status)}
             </span>
-            {clip.camera_id && (
+            {(clip as any).camera_label && (
               <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md text-sky-400 bg-sky-500/10 border border-sky-500/20">
-                {clip.camera_id.replace('cam_', 'Cam ').replace(/\b([a-d])\b/g, (_m, l) => l.toUpperCase())}
+                {(clip as any).camera_label || clip.camera_id}
               </span>
             )}
           </div>
