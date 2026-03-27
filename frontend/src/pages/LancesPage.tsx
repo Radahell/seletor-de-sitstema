@@ -720,9 +720,33 @@ export default function LancesPage() {
   };
 
   // Client-side pagination
+  // Agrupar clips por lance_id (ou ±30s de created_at como fallback)
+  const groupedClips = useMemo(() => {
+    const groups: { key: string; time: string; refTs?: number; eventLabel?: string; clips: ClipInfo[] }[] = [];
+    const sorted = [...clips].sort((a, b) => {
+      const aTs = (a as any).reference_ts || new Date(a.created_at).getTime() / 1000;
+      const bTs = (b as any).reference_ts || new Date(b.created_at).getTime() / 1000;
+      return bTs - aTs;
+    });
+    for (const clip of sorted) {
+      const lanceId = (clip as any).lance_id;
+      if (lanceId) {
+        const existing = groups.find(g => g.key === lanceId);
+        if (existing) { existing.clips.push(clip); continue; }
+        groups.push({ key: lanceId, time: clip.created_at, refTs: (clip as any).reference_ts, eventLabel: clip.event_label || undefined, clips: [clip] });
+      } else {
+        const clipTime = new Date(clip.created_at).getTime();
+        const existing = groups.find(g => !g.key.startsWith('clip_') && Math.abs(new Date(g.time).getTime() - clipTime) < 30000);
+        if (existing) { existing.clips.push(clip); }
+        else { groups.push({ key: `clip_${clip.id}`, time: clip.created_at, clips: [clip] }); }
+      }
+    }
+    return groups;
+  }, [clips]);
+  const paginatedGroups = useMemo(() => groupedClips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [groupedClips, page]);
   const paginatedClips = useMemo(() => clips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [clips, page]);
   const paginatedRecordings = useMemo(() => recordings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [recordings, page]);
-  const totalClipPages = Math.max(1, Math.ceil(clips.length / PAGE_SIZE));
+  const totalClipPages = Math.max(1, Math.ceil(groupedClips.length / PAGE_SIZE));
   const totalRecordingPages = Math.max(1, Math.ceil(recordings.length / PAGE_SIZE));
 
   const formatDuration = (seconds: number) => {
@@ -922,21 +946,36 @@ export default function LancesPage() {
               ) : (
                 <div>
                   <p className="text-xs text-zinc-600 mb-4 font-medium uppercase tracking-widest">
-                    {clips.length} {clips.length === 1 ? 'lance' : 'lances'} — passe o mouse para ver a prévia
+                    {groupedClips.length} {groupedClips.length === 1 ? 'lance' : 'lances'} ({clips.length} clips) — passe o mouse para ver a prévia
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {paginatedClips.map(clip => (
-                      <ClipCard
-                        key={clip.id}
-                        clip={clip}
-                        token={token}
-                        onStream={handleStreamClip}
-                        onDownload={handleDownloadClip}
-                        onDelete={handleDeleteClip}
-                        getStatusColor={getStatusColor}
-                        getStatusLabel={getStatusLabel}
-                        formatDate={formatDate}
-                      />
+                  <div className="space-y-6">
+                    {groupedClips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(group => (
+                      <div key={group.key}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                          <span className="text-xs font-bold text-zinc-400 uppercase">
+                            {group.eventLabel || 'Lance'} — {group.refTs ? new Date(group.refTs * 1000).toLocaleTimeString('pt-BR') : formatDate(group.time)}
+                          </span>
+                          <span className="text-xs text-zinc-600">
+                            {group.clips.length} câmera{group.clips.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {group.clips.map(clip => (
+                            <ClipCard
+                              key={clip.id}
+                              clip={clip}
+                              token={token}
+                              onStream={handleStreamClip}
+                              onDownload={handleDownloadClip}
+                              onDelete={handleDeleteClip}
+                              getStatusColor={getStatusColor}
+                              getStatusLabel={getStatusLabel}
+                              formatDate={formatDate}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                   {totalClipPages > 1 && (
