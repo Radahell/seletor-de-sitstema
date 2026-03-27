@@ -757,7 +757,9 @@ export default function LancesPage() {
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('pt-BR', {
+    // O servidor salva em -04 mas sem timezone no string. Adicionar pra não interpretar como UTC.
+    const d = dateStr.includes('T') || dateStr.includes('+') || dateStr.includes('Z') ? dateStr : dateStr.replace(' ', 'T') + '-04:00';
+    return new Date(d).toLocaleDateString('pt-BR', {
       day: '2-digit', month: '2-digit', year: '2-digit',
       hour: '2-digit', minute: '2-digit',
     });
