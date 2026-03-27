@@ -291,7 +291,7 @@ function ClipCard({
         {clip.athlete_name && (
           <p className="text-sm text-white font-semibold truncate mb-0.5">{clip.athlete_name}</p>
         )}
-        <p className="text-sm text-zinc-400 font-medium">{formatDate(clip.created_at)}</p>
+        <p className="text-sm text-zinc-400 font-medium">{(clip as any).reference_ts ? new Date((clip as any).reference_ts * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : formatDate(clip.created_at)}</p>
 
         {clip.resolution && (
           <p className="text-[10px] text-zinc-600 mt-0.5 font-mono">{clip.resolution}</p>
