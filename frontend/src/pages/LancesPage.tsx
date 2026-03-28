@@ -1096,15 +1096,15 @@ export default function LancesPage() {
       {/* Video Player Modal */}
       {playerUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/90 backdrop-blur-sm overflow-y-auto py-8"
           onClick={() => { setPlayerUrl(null); setPlayerClipId(null); setPlayerRotation(0); }}
         >
           <div
-            className="relative w-full max-w-4xl mx-4"
+            className="relative w-full max-w-4xl mx-4 my-auto"
             onClick={e => e.stopPropagation()}
           >
             {/* Controls bar */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 sticky top-0 z-10 bg-black/80 backdrop-blur-sm rounded-xl px-2 py-2">
               <div className="flex items-center gap-2">
                 {/* Preview rotation (visual only) */}
                 <button
@@ -1143,7 +1143,7 @@ export default function LancesPage() {
 
             {/* Video */}
             <div className="rounded-2xl overflow-hidden bg-black border border-white/10 flex items-center justify-center"
-              style={{ aspectRatio: playerRotation % 180 === 0 ? '16/9' : '9/16' }}
+              style={{ aspectRatio: playerRotation % 180 === 0 ? '16/9' : '9/16', maxHeight: '80vh' }}
             >
               <video
                 key={playerUrl}
