@@ -186,6 +186,7 @@ function ClipCard({
   onStream,
   onDownload,
   onDelete,
+  canDelete,
   getStatusColor,
   getStatusLabel,
   formatDate,
@@ -195,6 +196,7 @@ function ClipCard({
   onStream: (id: string) => void;
   onDownload: (id: string) => void;
   onDelete: (id: string) => void;
+  canDelete: boolean;
   getStatusColor: (s: string) => string;
   getStatusLabel: (s: string) => string;
   formatDate: (s?: string) => string;
@@ -318,13 +320,15 @@ function ClipCard({
               </button>
             </>
           )}
-          <button
-            onClick={() => onDelete(clip.id)}
-            className="py-2 px-3 rounded-xl bg-red-500/5 text-red-500/60 text-xs font-bold hover:bg-red-500/10 hover:text-red-400 transition-colors flex items-center justify-center border border-red-500/10 hover:border-red-500/20"
-            title="Excluir"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {canDelete && (
+            <button
+              onClick={() => onDelete(clip.id)}
+              className="py-2 px-3 rounded-xl bg-red-500/5 text-red-500/60 text-xs font-bold hover:bg-red-500/10 hover:text-red-400 transition-colors flex items-center justify-center border border-red-500/10 hover:border-red-500/20"
+              title="Excluir"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -661,7 +665,7 @@ function LiveSessionPlayer({ sessionId, token }: { sessionId: string; token: str
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function LancesPage() {
   const navigate = useNavigate();
-  const { user, tenants } = useAuth();
+  const { user, tenants, isSuperAdmin } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>('clips');
   const [clips, setClips] = useState<ClipInfo[]>([]);
@@ -971,6 +975,7 @@ export default function LancesPage() {
                               onStream={handleStreamClip}
                               onDownload={handleDownloadClip}
                               onDelete={handleDeleteClip}
+                              canDelete={isSuperAdmin}
                               getStatusColor={getStatusColor}
                               getStatusLabel={getStatusLabel}
                               formatDate={formatDate}
