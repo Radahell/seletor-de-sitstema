@@ -146,6 +146,9 @@ function useVideoPreview(clipId: string, token: string | null) {
     }
   }, [clipId, token, previewUrl]);
 
+  // Auto-fetch preview URL on mount (pra gerar thumbnail)
+  useEffect(() => { fetchPreviewUrl(); }, [fetchPreviewUrl]);
+
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
     fetchPreviewUrl();
