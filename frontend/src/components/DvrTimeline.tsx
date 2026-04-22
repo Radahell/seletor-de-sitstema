@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Hls from 'hls.js';
 import { Clock, Film, Play, Pause, Scissors, ChevronLeft, ChevronRight, Camera, Download, Loader2 } from 'lucide-react';
 
 const SCL_API = import.meta.env.VITE_SCL_API_URL || '/scl-api';
@@ -60,8 +59,13 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
   const [isCutting, setIsCutting] = useState(false);
   const [cutResult, setCutResult] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  // Playlist client-side: lista de URLs + durações estimadas
+  const [playlist, setPlaylist] = useState<{ url: string; duration: number; ts: number }[]>([]);
+  const [currentChunkIdx, setCurrentChunkIdx] = useState(0);
+  // Offset acumulado dos chunks anteriores (tempo global = soma + currentTime do chunk atual)
+  const playlistRef = useRef<{ url: string; duration: number; ts: number }[]>([]);
+  const currentChunkIdxRef = useRef(0);
 
   // Fetch DVR data
   const fetchDvr = useCallback(async () => {
@@ -82,43 +86,75 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
     return () => clearInterval(interval);
   }, [fetchDvr]);
 
-  // Load HLS stream for selected camera (reprodução contínua de todos os chunks)
+  // Carrega playlist de chunks. Player vai tocar 1 por 1 trocando o src em onEnded.
   const loadCameraVideo = useCallback((cameraId: string) => {
     if (!dvr) return;
     const cam = dvr.cameras[cameraId];
-    if (!cam || cam.chunks.length === 0) return;
+    if (!cam || cam.chunks.length === 0) { setPlaylist([]); setVideoUrl(null); return; }
 
-    const hlsUrl = `${SCL_API}/api/streams/${sessionId}/hls.m3u8?camera_id=${cameraId}`;
-    setVideoUrl(hlsUrl);
-
-    // Destrói HLS anterior se existir
-    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
-
-    const video = videoRef.current;
-    if (!video) return;
-
-    // Safari tem suporte nativo HLS
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = hlsUrl;
-    } else if (Hls.isSupported()) {
-      // Chrome/Firefox/etc usam hls.js
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
-      hls.loadSource(hlsUrl);
-      hls.attachMedia(video);
-      hlsRef.current = hls;
-    } else {
-      // Fallback: último chunk só
-      const latestChunk = cam.chunks[cam.chunks.length - 1];
-      setVideoUrl(`${SCL_API}/api/streams/${sessionId}/chunk/${latestChunk.ts}?camera_id=${cameraId}`);
-    }
+    // Calcula duração de cada chunk pelo delta de timestamp do próximo (default 10s no último)
+    const list = cam.chunks.map((c, i) => {
+      const nextTs = i < cam.chunks.length - 1 ? cam.chunks[i + 1].ts : c.ts + 10000;
+      const duration = Math.max(1, (nextTs - c.ts) / 1000);
+      return {
+        url: `${SCL_API}/api/streams/${sessionId}/chunk/${c.ts}?camera_id=${cameraId}`,
+        duration,
+        ts: c.ts,
+      };
+    });
+    setPlaylist(list);
+    playlistRef.current = list;
+    setCurrentChunkIdx(0);
+    currentChunkIdxRef.current = 0;
+    setVideoUrl(list[0]?.url ?? null);
   }, [dvr, sessionId]);
 
   useEffect(() => {
     if (selectedCamera) loadCameraVideo(selectedCamera);
-    return () => {
-      if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
-    };
   }, [selectedCamera, loadCameraVideo]);
+
+  // Tempo global = soma das durações dos chunks anteriores + currentTime do chunk atual
+  const globalTime = useCallback(() => {
+    const idx = currentChunkIdxRef.current;
+    const prev = playlistRef.current.slice(0, idx).reduce((s, c) => s + c.duration, 0);
+    return prev + (videoRef.current?.currentTime ?? 0);
+  }, []);
+
+  // Seek pra um tempo global: descobre qual chunk + offset local
+  const seekToGlobal = useCallback((globalSec: number) => {
+    let acc = 0;
+    for (let i = 0; i < playlistRef.current.length; i++) {
+      const c = playlistRef.current[i];
+      if (globalSec < acc + c.duration) {
+        if (i !== currentChunkIdxRef.current) {
+          currentChunkIdxRef.current = i;
+          setCurrentChunkIdx(i);
+          setVideoUrl(c.url);
+          // Após carregar, seek pro offset local
+          setTimeout(() => {
+            if (videoRef.current) videoRef.current.currentTime = globalSec - acc;
+          }, 150);
+        } else if (videoRef.current) {
+          videoRef.current.currentTime = globalSec - acc;
+        }
+        return;
+      }
+      acc += c.duration;
+    }
+  }, []);
+
+  // Ao terminar um chunk, pula pro próximo automaticamente
+  const handleVideoEnded = useCallback(() => {
+    const next = currentChunkIdxRef.current + 1;
+    if (next < playlistRef.current.length) {
+      currentChunkIdxRef.current = next;
+      setCurrentChunkIdx(next);
+      setVideoUrl(playlistRef.current[next].url);
+      setTimeout(() => {
+        if (videoRef.current) { videoRef.current.currentTime = 0; videoRef.current.play().catch(() => {}); }
+      }, 100);
+    }
+  }, []);
 
   // Cut handler
   const handleCut = async () => {
@@ -206,10 +242,12 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
               {videoUrl ? (
                 <video
                   ref={videoRef}
+                  src={videoUrl}
                   className="w-full h-full object-contain"
-                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                  onTimeUpdate={() => setCurrentTime(globalTime())}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
+                  onEnded={handleVideoEnded}
                   controls
                 />
               ) : (
@@ -310,8 +348,7 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
                   const pct = (e.clientX - rect.left) / rect.width;
                   const time = pct * totalDuration;
                   setCurrentTime(time);
-                  // Seek no video HLS (reprodução contínua entre chunks)
-                  if (videoRef.current) videoRef.current.currentTime = time;
+                  seekToGlobal(time);
                 }}
               />
             </div>
