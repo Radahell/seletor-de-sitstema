@@ -207,14 +207,18 @@ function ClipCard({
   const { videoRef, previewUrl, isHovered, handleMouseEnter, handleMouseLeave } =
     useVideoPreview(clip.id, token);
 
-  // Gera thumbnail automaticamente a partir do vídeo quando não há thumbnail_path
+  // Preferir thumbnail gerado pelo servidor (via ffmpeg + X-Accel-Redirect)
+  // Fallback: gera no browser via canvas (lento, baixa o video inteiro)
+  const serverThumbnail = clip.status === 'ready' && token
+    ? `${SCL_API}/api/athlete/clips/${clip.id}/thumbnail?token=${encodeURIComponent(token)}`
+    : null;
   const autoThumbnail = useVideoThumbnail(
-    !clip.thumbnail_path && clip.status === 'ready' ? previewUrl : null
+    !clip.thumbnail_path && !serverThumbnail && clip.status === 'ready' ? previewUrl : null
   );
 
   const thumbnailSrc = clip.thumbnail_path
     ? `${SCL_API}${clip.thumbnail_path}`
-    : autoThumbnail;
+    : serverThumbnail || autoThumbnail;
 
   return (
     <div
