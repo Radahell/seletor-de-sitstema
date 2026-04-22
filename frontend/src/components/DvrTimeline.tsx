@@ -285,8 +285,11 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
                   const pct = (e.clientX - rect.left) / rect.width;
                   const time = pct * totalDuration;
                   setCurrentTime(time);
-                  // Seek direto no MP4 concatenado
-                  if (videoRef.current) videoRef.current.currentTime = time;
+                  // Seek + play automático
+                  if (videoRef.current) {
+                    videoRef.current.currentTime = time;
+                    videoRef.current.play().catch(() => {});
+                  }
                 }}
               />
             </div>
