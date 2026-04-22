@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Hls from 'hls.js';
 import { Clock, Film, Play, Pause, Scissors, ChevronLeft, ChevronRight, Camera, Download, Loader2 } from 'lucide-react';
 
 const SCL_API = import.meta.env.VITE_SCL_API_URL || '/scl-api';
@@ -59,6 +60,7 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
   const [isCutting, setIsCutting] = useState(false);
   const [cutResult, setCutResult] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   // Fetch DVR data
@@ -80,18 +82,42 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
     return () => clearInterval(interval);
   }, [fetchDvr]);
 
-  // Servidor concatena todos os chunks em 1 MP4 único (zero delay entre chunks)
+  // HLS com TS — hls.js usa MSE pra appendar segmentos sem recarregar (YouTube-like)
   const loadCameraVideo = useCallback((cameraId: string) => {
     if (!dvr) return;
     const cam = dvr.cameras[cameraId];
     if (!cam || cam.chunks.length === 0) { setVideoUrl(null); return; }
-    // Usa timestamp do último chunk como "versão" — browser re-fetch quando chega chunk novo
-    const lastTs = cam.chunks[cam.chunks.length - 1].ts;
-    setVideoUrl(`${SCL_API}/api/streams/${sessionId}/concat.mp4?camera_id=${cameraId}&_v=${lastTs}`);
+
+    const hlsUrl = `${SCL_API}/api/streams/${sessionId}/hls.m3u8?camera_id=${cameraId}`;
+    setVideoUrl(hlsUrl);
+
+    // Destrói HLS anterior
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Safari: HLS nativo
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = hlsUrl;
+    } else if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        liveSyncDuration: 10,
+        // EVENT playlist: hls.js dá refresh automático pra detectar segmentos novos
+        manifestLoadingTimeOut: 10000,
+        manifestLoadingMaxRetry: 4,
+      });
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      hlsRef.current = hls;
+    }
   }, [dvr, sessionId]);
 
   useEffect(() => {
     if (selectedCamera) loadCameraVideo(selectedCamera);
+    return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
   }, [selectedCamera, loadCameraVideo]);
 
   // Cut handler
@@ -180,7 +206,6 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
               {videoUrl ? (
                 <video
                   ref={videoRef}
-                  src={videoUrl}
                   className="w-full h-full object-contain"
                   onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                   onPlay={() => setIsPlaying(true)}
