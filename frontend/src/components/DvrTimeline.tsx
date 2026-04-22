@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Hls from 'hls.js';
 import { Clock, Film, Play, Pause, Scissors, ChevronLeft, ChevronRight, Camera, Download, Loader2 } from 'lucide-react';
 
 const SCL_API = import.meta.env.VITE_SCL_API_URL || '/scl-api';
@@ -59,6 +60,7 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
   const [isCutting, setIsCutting] = useState(false);
   const [cutResult, setCutResult] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   // Fetch DVR data
@@ -80,28 +82,42 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
     return () => clearInterval(interval);
   }, [fetchDvr]);
 
-  // Load video for selected camera
-  const loadCameraVideo = useCallback(async (cameraId: string) => {
+  // Load HLS stream for selected camera (reprodução contínua de todos os chunks)
+  const loadCameraVideo = useCallback((cameraId: string) => {
     if (!dvr) return;
     const cam = dvr.cameras[cameraId];
     if (!cam || cam.chunks.length === 0) return;
 
-    // Use latest chunk as video preview
-    const latestChunk = cam.chunks[cam.chunks.length - 1];
-    try {
-      const data = await sclFetch<{ url: string }>(
-        `/api/streams/${sessionId}/chunk-video?camera_id=${cameraId}&ts=${latestChunk.ts}`,
-        token,
-      );
-      setVideoUrl(data.url);
-    } catch {
-      // Try direct chunk URL
-      setVideoUrl(`${SCL_API}/api/streams/${sessionId}/latest-chunk?camera_id=${cameraId}&after=1`);
+    const hlsUrl = `${SCL_API}/api/streams/${sessionId}/hls.m3u8?camera_id=${cameraId}`;
+    setVideoUrl(hlsUrl);
+
+    // Destrói HLS anterior se existir
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Safari tem suporte nativo HLS
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = hlsUrl;
+    } else if (Hls.isSupported()) {
+      // Chrome/Firefox/etc usam hls.js
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      hlsRef.current = hls;
+    } else {
+      // Fallback: último chunk só
+      const latestChunk = cam.chunks[cam.chunks.length - 1];
+      setVideoUrl(`${SCL_API}/api/streams/${sessionId}/chunk/${latestChunk.ts}?camera_id=${cameraId}`);
     }
-  }, [dvr, sessionId, token]);
+  }, [dvr, sessionId]);
 
   useEffect(() => {
     if (selectedCamera) loadCameraVideo(selectedCamera);
+    return () => {
+      if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+    };
   }, [selectedCamera, loadCameraVideo]);
 
   // Cut handler
@@ -190,7 +206,6 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
               {videoUrl ? (
                 <video
                   ref={videoRef}
-                  src={videoUrl}
                   className="w-full h-full object-contain"
                   onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                   onPlay={() => setIsPlaying(true)}
@@ -295,6 +310,8 @@ export default function DvrTimeline({ sessionId, token }: { sessionId: string; t
                   const pct = (e.clientX - rect.left) / rect.width;
                   const time = pct * totalDuration;
                   setCurrentTime(time);
+                  // Seek no video HLS (reprodução contínua entre chunks)
+                  if (videoRef.current) videoRef.current.currentTime = time;
                 }}
               />
             </div>
