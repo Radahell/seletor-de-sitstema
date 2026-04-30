@@ -9,6 +9,7 @@ import {
   Play,
   RefreshCw,
   RotateCw,
+  RotateCcw,
   Trash2,
   Video,
   Wifi,
@@ -805,11 +806,11 @@ export default function LancesPage() {
     } catch (err: any) { setError(err.message); }
   };
 
-  const handleRotateOnServer = async () => {
+  const handleRotateOnServer = async (direction: 'cw' | 'ccw' = 'cw') => {
     if (!token || !playerClipId || isRotating) return;
     setIsRotating(true);
     try {
-      const resp = await fetch(`${SCL_API}/api/athlete/clips/${playerClipId}/rotate`, {
+      const resp = await fetch(`${SCL_API}/api/athlete/clips/${playerClipId}/rotate?direction=${direction}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1129,20 +1130,36 @@ export default function LancesPage() {
                   {playerRotation > 0 ? `${playerRotation}°` : 'Girar preview'}
                 </button>
 
-                {/* Server rotation (permanent) */}
+                {/* Server rotation (permanent) — esquerda */}
                 <button
-                  onClick={handleRotateOnServer}
+                  onClick={() => handleRotateOnServer('ccw')}
                   disabled={isRotating}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-purple-300 hover:text-white transition-all border border-purple-500/20 hover:border-purple-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ background: 'rgba(124,58,237,0.1)' }}
-                  title="Rotacionar o arquivo de vídeo permanentemente (90° horário)"
+                  title="Rotacionar o arquivo permanentemente (90° anti-horário)"
+                >
+                  {isRotating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                  {isRotating ? '...' : 'Esquerda'}
+                </button>
+
+                {/* Server rotation (permanent) — direita */}
+                <button
+                  onClick={() => handleRotateOnServer('cw')}
+                  disabled={isRotating}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-purple-300 hover:text-white transition-all border border-purple-500/20 hover:border-purple-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: 'rgba(124,58,237,0.1)' }}
+                  title="Rotacionar o arquivo permanentemente (90° horário)"
                 >
                   {isRotating ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <RotateCw className="w-4 h-4" />
                   )}
-                  {isRotating ? 'Rotacionando...' : 'Rotacionar vídeo'}
+                  {isRotating ? '...' : 'Direita'}
                 </button>
               </div>
               <button
