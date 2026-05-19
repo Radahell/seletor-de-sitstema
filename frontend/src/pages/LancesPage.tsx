@@ -281,19 +281,20 @@ function ClipCard({
 
       {/* Info */}
       <div className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${getStatusColor(clip.status)}`}>
-              {getStatusLabel(clip.status)}
+        <div className="flex flex-wrap items-center gap-1.5 mb-2 min-w-0">
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md whitespace-nowrap ${getStatusColor(clip.status)}`}>
+            {getStatusLabel(clip.status)}
+          </span>
+          {(clip as any).camera_label && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md whitespace-nowrap text-sky-400 bg-sky-500/10 border border-sky-500/20">
+              {(clip as any).camera_label || clip.camera_id}
             </span>
-            {(clip as any).camera_label && (
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md text-sky-400 bg-sky-500/10 border border-sky-500/20">
-                {(clip as any).camera_label || clip.camera_id}
-              </span>
-            )}
-          </div>
+          )}
           {clip.event_label && (
-            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md text-amber-400 bg-amber-500/10 border border-amber-500/20">
+            <span
+              className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md text-amber-400 bg-amber-500/10 border border-amber-500/20 truncate min-w-0 max-w-full"
+              title={clip.event_label}
+            >
               {clip.event_label}
             </span>
           )}
