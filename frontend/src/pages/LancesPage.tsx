@@ -734,11 +734,15 @@ export default function LancesPage() {
     }
   };
 
-  // Filtro por nome do jogador (athlete_name), case-insensitive, match parcial
+  // Filtro por nome do jogador: busca em athlete_name + event_label
+  // (alguns lances guardam o nome em event_label, ex.: "DESTAQUE - GIBSON BRUNO")
   const filteredClips = useMemo(() => {
     const q = searchAthlete.trim().toLowerCase();
     if (!q) return clips;
-    return clips.filter(c => (c.athlete_name || '').toLowerCase().includes(q));
+    return clips.filter(c => {
+      const fields = [c.athlete_name, c.event_label, c.event_type].filter(Boolean) as string[];
+      return fields.some(f => f.toLowerCase().includes(q));
+    });
   }, [clips, searchAthlete]);
 
   // Client-side pagination
@@ -1036,7 +1040,7 @@ export default function LancesPage() {
                             {group.clips.length} câmera{group.clips.length > 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                           {group.clips.map(clip => (
                             <ClipCard
                               key={clip.id}
