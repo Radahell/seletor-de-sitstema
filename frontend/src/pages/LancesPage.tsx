@@ -768,7 +768,7 @@ export default function LancesPage() {
       }
     }
     return groups;
-  }, [clips]);
+  }, [filteredClips]);
   const paginatedGroups = useMemo(() => groupedClips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [groupedClips, page]);
   const paginatedClips = useMemo(() => filteredClips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredClips, page]);
   const paginatedRecordings = useMemo(() => recordings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [recordings, page]);
