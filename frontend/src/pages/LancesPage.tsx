@@ -10,6 +10,7 @@ import {
   RefreshCw,
   RotateCw,
   RotateCcw,
+  Search,
   Trash2,
   Video,
   Wifi,
@@ -682,6 +683,7 @@ export default function LancesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [searchAthlete, setSearchAthlete] = useState('');
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [playerClipId, setPlayerClipId] = useState<string | null>(null);
   const [playerRotation, setPlayerRotation] = useState(0);
@@ -692,6 +694,7 @@ export default function LancesPage() {
 
   useEffect(() => { setPage(1); }, [activeTab]);
   useEffect(() => { loadData(); }, [activeTab]);
+  useEffect(() => { setPage(1); }, [searchAthlete]);
 
   const fetchAllPages = async <T,>(endpoint: string, key: string, tkn: string): Promise<T[]> => {
     let all: T[] = [];
@@ -731,11 +734,18 @@ export default function LancesPage() {
     }
   };
 
+  // Filtro por nome do jogador (athlete_name), case-insensitive, match parcial
+  const filteredClips = useMemo(() => {
+    const q = searchAthlete.trim().toLowerCase();
+    if (!q) return clips;
+    return clips.filter(c => (c.athlete_name || '').toLowerCase().includes(q));
+  }, [clips, searchAthlete]);
+
   // Client-side pagination
   // Agrupar clips por lance_id (ou ±30s de created_at como fallback)
   const groupedClips = useMemo(() => {
     const groups: { key: string; time: string; refTs?: number; eventLabel?: string; clips: ClipInfo[] }[] = [];
-    const sorted = [...clips].sort((a, b) => {
+    const sorted = [...filteredClips].sort((a, b) => {
       const aTs = (a as any).reference_ts || new Date(a.created_at).getTime() / 1000;
       const bTs = (b as any).reference_ts || new Date(b.created_at).getTime() / 1000;
       return bTs - aTs;
@@ -756,7 +766,7 @@ export default function LancesPage() {
     return groups;
   }, [clips]);
   const paginatedGroups = useMemo(() => groupedClips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [groupedClips, page]);
-  const paginatedClips = useMemo(() => clips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [clips, page]);
+  const paginatedClips = useMemo(() => filteredClips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredClips, page]);
   const paginatedRecordings = useMemo(() => recordings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [recordings, page]);
   const totalClipPages = Math.max(1, Math.ceil(groupedClips.length / PAGE_SIZE));
   const totalRecordingPages = Math.max(1, Math.ceil(recordings.length / PAGE_SIZE));
@@ -959,8 +969,60 @@ export default function LancesPage() {
                 <EmptyState icon={Film} title="Nenhum lance encontrado" description="Seus lances aparecerão aqui quando forem capturados durante os jogos" />
               ) : (
                 <div>
+                  <div className="mb-4 flex items-center gap-2 rounded-2xl border border-white/5 px-3 py-2"
+                    style={{ background: 'rgba(255,255,255,0.02)' }}
+                  >
+                    <Search className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                    <input
+                      type="text"
+                      value={searchAthlete}
+                      onChange={e => setSearchAthlete(e.target.value)}
+                      placeholder="Filtrar por nome do jogador..."
+                      className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 outline-none"
+                    />
+                    {searchAthlete && (
+                      <button
+                        onClick={() => setSearchAthlete('')}
+                        className="p-1 rounded-md text-zinc-500 hover:text-white hover:bg-white/5 transition-all"
+                        title="Limpar filtro"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {filteredClips.length === 0 ? (
+                    <EmptyState
+                      icon={Search}
+                      title="Nenhum jogador encontrado"
+                      description={`Nenhum lance corresponde a "${searchAthlete}". Tente outro nome ou limpe o filtro.`}
+                    />
+                  ) : (
+                  <>
+                  {totalClipPages > 1 && (
+                    <div className="flex items-center justify-center gap-4 mb-6">
+                      <button
+                        disabled={page <= 1}
+                        onClick={() => setPage(p => p - 1)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border border-white/10 hover:border-purple-500/30 hover:text-purple-400 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-400"
+                        style={{ background: 'rgba(255,255,255,0.03)' }}
+                      >
+                        Anterior
+                      </button>
+                      <span className="text-xs text-zinc-500 font-mono">
+                        {page} / {totalClipPages}
+                      </span>
+                      <button
+                        disabled={page >= totalClipPages}
+                        onClick={() => setPage(p => p + 1)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border border-white/10 hover:border-purple-500/30 hover:text-purple-400 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-400"
+                        style={{ background: 'rgba(255,255,255,0.03)' }}
+                      >
+                        Próximo
+                      </button>
+                    </div>
+                  )}
                   <p className="text-xs text-zinc-600 mb-4 font-medium uppercase tracking-widest">
-                    {groupedClips.length} {groupedClips.length === 1 ? 'lance' : 'lances'} ({clips.length} clips) — passe o mouse para ver a prévia
+                    {groupedClips.length} {groupedClips.length === 1 ? 'lance' : 'lances'} ({filteredClips.length} clips) — passe o mouse para ver a prévia
                   </p>
                   <div className="space-y-6">
                     {groupedClips.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(group => (
@@ -1015,6 +1077,8 @@ export default function LancesPage() {
                         Próximo
                       </button>
                     </div>
+                  )}
+                  </>
                   )}
                 </div>
               )
