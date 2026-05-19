@@ -22,8 +22,16 @@ from functools import wraps
 from typing import Any, Dict
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy import create_engine, text
 
-from app.db import execute_sql, fetch_all, fetch_one, safe_db_error
+from app.db import (
+    execute_sql,
+    fetch_all,
+    fetch_one,
+    safe_db_error,
+    build_tenant_database_url,
+    TENANT_DB_HOST,
+)
 
 user_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
@@ -65,6 +73,60 @@ def _user_profile_dto(row: Dict[str, Any]) -> Dict[str, Any]:
         "isActive": bool(row.get("is_active", True)),
         "createdAt": row.get("created_at").isoformat() if row.get("created_at") else None,
     }
+
+
+@user_bp.get("/by-tenant/<string:tenant_slug>/<int:tenant_user_id>/profile")
+@_service_auth_required
+def get_user_profile_by_tenant(tenant_slug: str, tenant_user_id: int):
+    """Resolve profile (name, nickname) a partir do ID local do tenant.
+
+    Útil quando o cliente (ex.: lance-de-ouro) só conhece o id do user
+    dentro do banco do tenant e precisa do nickname/nome canônicos.
+    Lê direto a tabela `users` do tenant — não exige sincronização
+    perfeita com o hub.
+    """
+    try:
+        tenant = fetch_one(
+            "SELECT id, database_host, database_name FROM tenants "
+            "WHERE slug = :slug AND is_active = TRUE",
+            {"slug": tenant_slug},
+        )
+        if not tenant:
+            return jsonify({"error": "Tenant não encontrado"}), 404
+
+        db_name = tenant.get("database_name")
+        db_host = tenant.get("database_host") or TENANT_DB_HOST
+        if not db_name:
+            return jsonify({"error": "Tenant sem database_name"}), 500
+
+        url = build_tenant_database_url(db_host, db_name)
+        engine = create_engine(url, pool_pre_ping=True, future=True)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT id, name, nickname, fk_id_user_hub "
+                        "FROM users WHERE id = :id"
+                    ),
+                    {"id": tenant_user_id},
+                ).mappings().first()
+        finally:
+            engine.dispose()
+
+        if not row:
+            return jsonify({"error": "Usuário não encontrado no tenant"}), 404
+
+        return jsonify({
+            "tenant_user_id": row["id"],
+            "hub_user_id": row.get("fk_id_user_hub"),
+            "name": row.get("name"),
+            "nickname": row.get("nickname"),
+        })
+
+    except Exception as e:
+        if ENV == "dev":
+            traceback.print_exc()
+        return jsonify({"error": safe_db_error(e)}), 500
 
 
 @user_bp.get("/<int:user_id>/profile")
