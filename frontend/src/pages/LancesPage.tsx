@@ -34,6 +34,7 @@ interface ClipInfo {
   thumbnail_path?: string;
   resolution?: string;
   athlete_name?: string;
+  athlete_nickname?: string;
   event_type?: string;
   event_label?: string;
   camera_id?: string;
@@ -300,8 +301,17 @@ function ClipCard({
           )}
         </div>
 
-        {clip.athlete_name && (
-          <p className="text-sm text-white font-semibold truncate mb-0.5">{clip.athlete_name}</p>
+        {(clip.athlete_nickname || clip.athlete_name) && (
+          <p
+            className="text-sm text-white font-semibold truncate mb-0.5"
+            title={clip.athlete_name || clip.athlete_nickname || ''}
+          >
+            {clip.athlete_nickname || clip.athlete_name}
+          </p>
+        )}
+        {clip.athlete_nickname && clip.athlete_name &&
+          clip.athlete_name !== clip.athlete_nickname && (
+          <p className="text-[11px] text-zinc-500 truncate mb-0.5">{clip.athlete_name}</p>
         )}
         <p className="text-sm text-zinc-400 font-medium">{(clip as any).reference_ts ? new Date((clip as any).reference_ts * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : formatDate(clip.created_at)}</p>
 
@@ -735,13 +745,19 @@ export default function LancesPage() {
     }
   };
 
-  // Filtro por nome do jogador: busca em athlete_name + event_label
-  // (alguns lances guardam o nome em event_label, ex.: "DESTAQUE - GIBSON BRUNO")
+  // Filtro: busca em athlete_nickname (apelido), athlete_name, event_label e event_type.
+  // Lances antigos só têm event_label ("DESTAQUE - Gilson Bruno"); novos
+  // também têm athlete_nickname/athlete_name resolvidos pelo tenant esportivo.
   const filteredClips = useMemo(() => {
     const q = searchAthlete.trim().toLowerCase();
     if (!q) return clips;
     return clips.filter(c => {
-      const fields = [c.athlete_name, c.event_label, c.event_type].filter(Boolean) as string[];
+      const fields = [
+        c.athlete_nickname,
+        c.athlete_name,
+        c.event_label,
+        c.event_type,
+      ].filter(Boolean) as string[];
       return fields.some(f => f.toLowerCase().includes(q));
     });
   }, [clips, searchAthlete]);
